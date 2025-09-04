@@ -1,0 +1,88 @@
+Municipal Funding Platform - Specifications Document
+Scope
+Background: Munify (https://munify.in/)  is India’s ﬁrst national municipal database built with the budgets and ﬁnancial statements of the municipal corporations of India. The contextual operational information was added, and the analysis was crystallized as credit scores and grades and published in April 2023.  In January 2024, the second edition of the credit grades was published with the latest available ﬁnancial results. The third edition of the credit grades will be published in September 2025.
+Munify’s subscribers include multilateral agencies, rating agencies, consulting ﬁrms, regulators and academia. Munify’s infographic dashboard, a visual presentation of the municipal ﬁnances of India, iiis co-branded with NIUA, the urban research arm of the Government of India.
+
+Munify is setting up an online ﬁnancing platform for Municipal projects, as a use case of its credit grades. The ﬁnancing will include both grant funding and project ﬁnancing.
+Munify’s financing platform is to bring municipal commissioners (borrowers and grantees) and the funders (lenders) to a platform to enable financing of municipal projects.
+The Municipal Funding Platform is designed to facilitate transparent information sharing, communication, and timely alerts among various stakeholders involved in municipal projects. It does not handle the actual flow of funds between lenders and borrowers.
+1. Landing Page
+•	Welcomes users and provides an overview of the platform.
+2. Registration Page
+•	Allows users to create accounts with necessary details.
+3. Platform Access Fee
+•	Defines the fee structure for accessing the platform's features.
+4. Current Projects Live
+•	Displays ongoing projects in real-time.
+5. Fully Funded Projects
+•	Showcases projects that have successfully reached their funding goals.
+6. My Projects
+a. Funded
+•	Displays projects that the user has contributed to financially.
+b. Shortlisted
+•	Lists projects saved for consideration.
+
+7. Projects
+a. Project Details
+•	Includes Project Name, Image, Municipality, Fund Requirement, Timeline to Raise, Terms, etc.
+b. Current Funding Commitment, Gap
+•	Displays the current financial status of the project.
+c. Documents
+•	Provides access to project-related documents.
+d. Financials
+•	Presents financial details of the project.
+e. Media
+•	Allows upload and viewing of Video/Audio/Pictures related to the project.
+f. Progress Update Post Funding
+•	Updates on project progress after reaching funding goals.
+g. Scheduled Live Q&A Sessions & Recording
+•	Announces and archives live Q&A sessions.
+h. View All Q&A
+•	Lists all questions and answers related to the project.
+8. Filter & Search Projects
+•	Enables users to efficiently find projects based on various criteria.
+9. View Municipal Details
+a. Financials
+•	Displays financial details of the municipality.
+b. Non-financial Information
+•	Presents non-financial information about the municipality.
+c. Ranking/Rating/Score
+•	Shows the municipality's ranking, rating, or score.
+10. Lender Actions
+a. View Project Details
+•	Allows lenders to explore detailed information about a project.
+b. Funding Commitment - Add/Update – Upload Approvals
+•	Lets lenders commit funds, update commitments, and upload necessary approvals.
+c. Favorite Projects
+•	Enables users to mark projects as favorites for easy access.
+d. Personal Notes
+•	Allows lenders to add and manage personal notes about projects.
+e. Q&A with Municipality
+•	Facilitates communication between lenders and municipalities.
+f. Request for Documents, Meetings, etc.
+•	Permits lenders to request additional project information.
+
+11. Municipal Actions
+a. Respond to Queries, Documents, etc.
+•	Enables municipalities to respond to queries and document requests.
+b. Schedule Live Q&A Sessions
+•	Allows municipalities to schedule live Q&A sessions.
+12. Munify/Administrator
+a. Add Projects
+•	Lets administrators add new projects to the platform.
+b. Update Projects
+•	Allows administrators to make changes to existing projects.
+c. Track Commitments
+•	Monitors and manages financial commitments made by lenders.
+d. Manual Notifications
+•	Facilitates the manual sending of notifications to users.
+e. Facilitate Outstanding Q&A, Meeting, Document Requests
+•	Assists in managing pending Q&A, meeting, and document requests.
+13. Notifications
+a. New Projects or Major Updates to Project
+•	Notifies users of newly added projects or significant updates.
+b. Updates on Favorite Projects – Q&A Sessions, New Funding Updates, etc.
+•	Sends updates about favorite projects, including Q&A sessions and funding updates.
+c. Upcoming Closures
+•	Alerts users about impending project closures.
+
