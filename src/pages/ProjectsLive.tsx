@@ -22,7 +22,7 @@ const mockProjects = [
     name: "Smart Water Management System",
     municipality: "Mumbai Municipal Corporation",
     state: "Maharashtra",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center",
     fundRequired: 50000000,
     currentFunding: 35000000,
     timeline: "6 months",
@@ -38,7 +38,7 @@ const mockProjects = [
     name: "Solar Street Lighting Project",
     municipality: "Delhi Municipal Corporation",
     state: "Delhi",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&h=200&fit=crop&crop=center",
     fundRequired: 25000000,
     currentFunding: 18000000,
     timeline: "4 months",
@@ -54,7 +54,7 @@ const mockProjects = [
     name: "Waste Management Modernization",
     municipality: "Bangalore City Corporation",
     state: "Karnataka",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1581578731548-c6a0c3f2f4c1?w=400&h=200&fit=crop&crop=center",
     fundRequired: 75000000,
     currentFunding: 45000000,
     timeline: "8 months",
@@ -135,7 +135,13 @@ export default function ProjectsLive() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {mockProjects.map((project) => (
           <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="aspect-video bg-gradient-to-r from-blue-500 to-purple-600 relative">
+            <div className="aspect-video relative overflow-hidden">
+              <img 
+                src={project.image} 
+                alt={project.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/20" />
               <div className="absolute top-4 right-4">
                 <Badge variant="secondary" className="bg-white/90">
                   {project.status}

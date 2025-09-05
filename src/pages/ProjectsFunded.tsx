@@ -23,7 +23,7 @@ const mockFundedProjects = [
     name: "Smart Traffic Management System",
     municipality: "Delhi Municipal Corporation",
     state: "Delhi",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=200&fit=crop&crop=center",
     totalFunding: 75000000,
     fundedAmount: 75000000,
     completionDate: "2024-01-15",
@@ -40,7 +40,7 @@ const mockFundedProjects = [
     name: "Green Energy Initiative",
     municipality: "Bangalore City Corporation",
     state: "Karnataka",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?w=400&h=200&fit=crop&crop=center",
     totalFunding: 50000000,
     fundedAmount: 50000000,
     completionDate: "2023-11-20",
@@ -57,7 +57,7 @@ const mockFundedProjects = [
     name: "Digital Governance Platform",
     municipality: "Mumbai Municipal Corporation",
     state: "Maharashtra",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop&crop=center",
     totalFunding: 30000000,
     fundedAmount: 30000000,
     completionDate: "2024-02-10",
@@ -74,7 +74,7 @@ const mockFundedProjects = [
     name: "Water Treatment Plant",
     municipality: "Chennai Corporation",
     state: "Tamil Nadu",
-    image: "/api/placeholder/400/200",
+    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center",
     totalFunding: 120000000,
     fundedAmount: 120000000,
     completionDate: "2023-09-30",
@@ -215,7 +215,13 @@ export default function ProjectsFunded() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {mockFundedProjects.map((project) => (
           <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="aspect-video bg-gradient-to-r from-green-500 to-blue-600 relative">
+            <div className="aspect-video relative overflow-hidden">
+              <img 
+                src={project.image} 
+                alt={project.name}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/20" />
               <div className="absolute top-4 right-4">
                 <Badge className="bg-green-600">
                   <CheckCircle className="h-3 w-3 mr-1" />

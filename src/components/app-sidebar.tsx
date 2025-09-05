@@ -82,20 +82,20 @@ const data = {
   ],
   projects: [
     {
-      name: "Design Engineering",
+      name: "Settings",
       url: "/main/projects",
       icon: Wrench,
     },
-    {
-      name: "Sales & Marketing",
-      url: "/main/projects/active",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "/main/projects/archived",
-      icon: Map,
-    },
+    // {
+    //   name: "Sales & Marketing",
+    //   url: "/main/projects/active",
+    //   icon: PieChart,
+    // },
+    // {
+    //   name: "Travel",
+    //   url: "/main/projects/archived",
+    //   icon: Map,
+    // },
   ],
 }
 
