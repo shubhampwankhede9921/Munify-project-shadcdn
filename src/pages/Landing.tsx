@@ -4,6 +4,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, Building2, Users, TrendingUp, Shield } from "lucide-react"
 import Copyright from "@/components/Copyright"
+import MunifyLogo from "@/assets/MunifyLOGO.png"
 
 export default function Landing() {
   return (
@@ -12,8 +13,8 @@ export default function Landing() {
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Building2 className="h-8 w-8 text-blue-600" />
-            <span className="text-2xl font-bold text-gray-900">Munify</span>
+            <img src={MunifyLogo} className="h-12 w-auto" />
+            
           </div>
           <div className="flex items-center space-x-4">
             <Button variant="ghost" asChild>
@@ -47,7 +48,7 @@ export default function Landing() {
               </Link>
             </Button>
             <Button variant="outline" size="lg" className="px-8" asChild>
-              <Link to="/main">Learn More</Link>
+              <Link to="/main">Go to Dashboard</Link>
             </Button>
           </div>
         </div>

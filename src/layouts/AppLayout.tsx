@@ -2,6 +2,7 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/s
 import { Outlet } from "react-router-dom";
 import { AppSidebar } from "@/components/app-sidebar";
 import Copyright from "@/components/Copyright";
+import logoBig from "@/assets/logo-big.png";
 
 export default function AppLayout() {
 
@@ -12,7 +13,7 @@ export default function AppLayout() {
       <SidebarInset>
         <div className="flex h-14 items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <span className="font-semibold">Munify App</span>
+          <img src={logoBig} alt="Munify" className="h-8 w-auto" />
         </div>
         <div className="p-6">
           <Outlet />
