@@ -1,15 +1,15 @@
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useParams, useNavigate } from "react-router-dom"
+import { getProjectById } from "@/lib/projects"
 import { 
   MapPin, 
   Calendar, 
-  DollarSign, 
-  Users, 
   Clock,
   Star,
   Heart,
@@ -17,105 +17,96 @@ import {
   Play,
   MessageCircle,
   FileText,
-  BarChart3,
   Image,
   Video,
   Mic,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  IndianRupee,
+  ArrowLeft
 } from "lucide-react"
 
-const mockProject = {
-  id: 1,
-  name: "Smart Water Management System",
-  municipality: "Mumbai Municipal Corporation",
-  state: "Maharashtra",
-  image: "/api/placeholder/800/400",
-  fundRequired: 50000000,
-  currentFunding: 35000000,
-  timeline: "6 months",
-  category: "Infrastructure",
-  status: "Live",
-  description: "Implementation of IoT-based water monitoring and management system across the city to improve water distribution efficiency and reduce wastage.",
-  progress: 70,
-  investors: 15,
-  daysLeft: 45,
-  creditRating: "AA+",
-  riskLevel: "Low",
-  documents: [
-    { name: "Project Proposal", type: "PDF", size: "2.3 MB" },
-    { name: "Financial Projections", type: "Excel", size: "1.1 MB" },
-    { name: "Technical Specifications", type: "PDF", size: "4.2 MB" },
-    { name: "Environmental Impact Assessment", type: "PDF", size: "3.1 MB" }
-  ],
-  media: [
-    { type: "video", title: "Project Overview", duration: "5:30" },
-    { type: "image", title: "Site Photos", count: 12 },
-    { type: "audio", title: "Municipal Commissioner Interview", duration: "8:45" }
-  ],
-  qa: [
-    {
-      id: 1,
-      question: "What is the expected ROI for this project?",
-      answer: "The project is expected to generate 15-20% annual returns through improved water efficiency and reduced operational costs.",
-      askedBy: "Investment Fund Manager",
-      answeredBy: "Municipal Commissioner",
-      date: "2 days ago"
-    },
-    {
-      id: 2,
-      question: "What are the environmental benefits?",
-      answer: "The system will reduce water wastage by 30% and improve monitoring of water quality in real-time.",
-      askedBy: "Environmental Consultant",
-      answeredBy: "Project Director",
-      date: "1 week ago"
-    }
-  ],
-  updates: [
-    {
-      id: 1,
-      title: "Site Survey Completed",
-      description: "Initial site survey and feasibility study completed successfully.",
-      date: "1 week ago",
-      type: "progress"
-    },
-    {
-      id: 2,
-      title: "New Funding Commitment",
-      description: "Green Energy Fund committed ₹5Cr to the project.",
-      date: "3 days ago",
-      type: "funding"
-    }
-  ]
-}
-
 export default function ProjectDetails() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  
+  const project = getProjectById(parseInt(id || '0'))
+  
+  if (!project) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center space-x-4">
+          <Button 
+            variant="outline" 
+            onClick={() => navigate('/main/projects/live')}
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Projects
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Project Not Found</h2>
+            <p className="text-muted-foreground">
+              The project you're looking for doesn't exist or has been removed.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* Back Button */}
+      <div className="flex items-center space-x-4">
+        <Button 
+          variant="outline" 
+          onClick={() => navigate('/main/projects/live')}
+        >
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Projects
+        </Button>
+      </div>
+
       {/* Project Header */}
       <Card>
-        <div className="aspect-video bg-gradient-to-r from-blue-500 to-purple-600 relative">
+        <div className="aspect-video relative overflow-hidden">
+          <img 
+            src={project.image} 
+            alt={project.name}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black/20" />
           <div className="absolute top-4 right-4">
             <Badge variant="secondary" className="bg-white/90">
-              {mockProject.status}
+              {project.status}
             </Badge>
           </div>
           <div className="absolute bottom-4 left-4 right-4 text-white">
-            <h1 className="text-3xl font-bold mb-2">{mockProject.name}</h1>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <MapPin className="h-4 w-4" />
-                <span>{mockProject.municipality}</span>
+            <h1 className="text-3xl font-bold mb-2">{project.name}</h1>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <MapPin className="h-4 w-4" />
+                  <span>{project.municipality}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Calendar className="h-4 w-4" />
+                  <span>{project.timeline}</span>
+                </div>
+                {project.status === "Completed" ? (
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Completed</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <Clock className="h-4 w-4" />
+                    <span>{project.daysLeft} days left</span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center space-x-2">
-                <Calendar className="h-4 w-4" />
-                <span>{mockProject.timeline}</span>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Clock className="h-4 w-4" />
-                <span>{mockProject.daysLeft} days left</span>
-              </div>
-            </div>
           </div>
         </div>
       </Card>
@@ -130,7 +121,7 @@ export default function ProjectDetails() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                {mockProject.description}
+                {project.description}
               </p>
             </CardContent>
           </Card>
@@ -153,31 +144,31 @@ export default function ProjectDetails() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <div className="text-sm text-muted-foreground">Total Funding Required</div>
-                      <div className="text-2xl font-bold">₹{(mockProject.fundRequired / 10000000).toFixed(1)}Cr</div>
+                      <div className="text-2xl font-bold">₹{(project.fundRequired / 10000000).toFixed(1)}Cr</div>
                     </div>
                     <div>
                       <div className="text-sm text-muted-foreground">Current Funding</div>
-                      <div className="text-2xl font-bold text-green-600">₹{(mockProject.currentFunding / 10000000).toFixed(1)}Cr</div>
+                      <div className="text-2xl font-bold text-green-600">₹{(project.currentFunding / 10000000).toFixed(1)}Cr</div>
                     </div>
                   </div>
                   <div>
                     <div className="flex justify-between text-sm mb-2">
                       <span>Funding Progress</span>
-                      <span>{mockProject.progress}%</span>
+                      <span>{project.progress}%</span>
                     </div>
-                    <Progress value={mockProject.progress} className="h-3" />
+                    <Progress value={project.progress} className="h-3" />
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
-                      <div className="text-2xl font-bold text-blue-600">{mockProject.investors}</div>
+                      <div className="text-2xl font-bold text-blue-600">{project.investors}</div>
                       <div className="text-sm text-muted-foreground">Investors</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-green-600">{mockProject.creditRating}</div>
+                      <div className="text-2xl font-bold text-green-600">{project.creditRating}</div>
                       <div className="text-sm text-muted-foreground">Credit Rating</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-orange-600">{mockProject.riskLevel}</div>
+                      <div className="text-2xl font-bold text-orange-600">{project.riskLevel}</div>
                       <div className="text-sm text-muted-foreground">Risk Level</div>
                     </div>
                   </div>
@@ -192,7 +183,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {mockProject.documents.map((doc, index) => (
+                    {project.documents?.map((doc, index) => (
                       <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex items-center space-x-3">
                           <FileText className="h-5 w-5 text-blue-600" />
@@ -219,7 +210,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid gap-4">
-                    {mockProject.media.map((item, index) => (
+                    {project.media?.map((item, index) => (
                       <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                         <div className="flex items-center space-x-3">
                           {item.type === "video" && <Video className="h-5 w-5 text-red-600" />}
@@ -250,7 +241,7 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {mockProject.qa.map((qa) => (
+                    {project.qa?.map((qa) => (
                       <div key={qa.id} className="border rounded-lg p-4">
                         <div className="flex items-start space-x-3">
                           <Avatar>
@@ -296,7 +287,7 @@ export default function ProjectDetails() {
             </CardHeader>
             <CardContent className="space-y-4">
               <Button className="w-full" size="lg">
-                <DollarSign className="h-4 w-4 mr-2" />
+                <IndianRupee className="h-4 w-4 mr-2" />
                 Fund This Project
               </Button>
               <div className="flex space-x-2">
@@ -330,11 +321,11 @@ export default function ProjectDetails() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mockProject.updates.map((update) => (
+                {project.updates?.map((update) => (
                   <div key={update.id} className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
                       {update.type === "progress" && <CheckCircle className="h-5 w-5 text-green-600" />}
-                      {update.type === "funding" && <DollarSign className="h-5 w-5 text-blue-600" />}
+                      {update.type === "funding" && <IndianRupee className="h-5 w-5 text-blue-600" />}
                     </div>
                     <div className="flex-1">
                       <div className="font-medium text-sm">{update.title}</div>
@@ -355,8 +346,8 @@ export default function ProjectDetails() {
             <CardContent>
               <div className="space-y-3">
                 <div>
-                  <div className="font-medium">{mockProject.municipality}</div>
-                  <div className="text-sm text-muted-foreground">{mockProject.state}</div>
+                  <div className="font-medium">{project.municipality}</div>
+                  <div className="text-sm text-muted-foreground">{project.state}</div>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>

@@ -10,14 +10,14 @@ import {
   Filter, 
   MapPin, 
   Calendar, 
-  DollarSign, 
   Star,
   Eye,
   Heart,
   TrendingUp,
   Clock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  IndianRupee
 } from "lucide-react"
 
 const mockMyProjects = {
@@ -135,7 +135,7 @@ export default function MyProjects() {
                 <p className="text-sm font-medium text-muted-foreground">Total Investment</p>
                 <p className="text-2xl font-bold">₹1Cr</p>
               </div>
-              <DollarSign className="h-8 w-8 text-blue-600" />
+              <IndianRupee className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -356,7 +356,7 @@ export default function MyProjects() {
                   {/* Action Buttons */}
                   <div className="flex space-x-2 pt-4">
                     <Button className="flex-1">
-                      <DollarSign className="h-4 w-4 mr-2" />
+                      <IndianRupee className="h-4 w-4 mr-2" />
                       Fund Now
                     </Button>
                     <Button variant="outline" size="icon">

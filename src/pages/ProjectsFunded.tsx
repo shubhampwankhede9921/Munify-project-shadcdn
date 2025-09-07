@@ -4,91 +4,31 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useNavigate } from "react-router-dom"
+import { mockProjects } from "@/lib/projects"
 import { 
   Search, 
   Filter, 
   MapPin, 
   Calendar, 
-  DollarSign, 
   CheckCircle,
   Star,
   Eye,
   Download,
-  TrendingUp
+  TrendingUp,
+  IndianRupee
 } from "lucide-react"
 
-const mockFundedProjects = [
-  {
-    id: 1,
-    name: "Smart Traffic Management System",
-    municipality: "Delhi Municipal Corporation",
-    state: "Delhi",
-    image: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=200&fit=crop&crop=center",
-    totalFunding: 75000000,
-    fundedAmount: 75000000,
-    completionDate: "2024-01-15",
-    category: "Infrastructure",
-    status: "Completed",
-    description: "AI-powered traffic management system with real-time monitoring and optimization.",
-    progress: 100,
-    investors: 25,
-    roi: 18.5,
-    impact: "Reduced traffic congestion by 35%"
-  },
-  {
-    id: 2,
-    name: "Green Energy Initiative",
-    municipality: "Bangalore City Corporation",
-    state: "Karnataka",
-    image: "https://images.unsplash.com/photo-1497435334941-8c899ee9e8e9?w=400&h=200&fit=crop&crop=center",
-    totalFunding: 50000000,
-    fundedAmount: 50000000,
-    completionDate: "2023-11-20",
-    category: "Renewable Energy",
-    status: "Completed",
-    description: "Solar panel installation across municipal buildings and street lighting.",
-    progress: 100,
-    investors: 18,
-    roi: 22.3,
-    impact: "Generated 2.5MW clean energy"
-  },
-  {
-    id: 3,
-    name: "Digital Governance Platform",
-    municipality: "Mumbai Municipal Corporation",
-    state: "Maharashtra",
-    image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=200&fit=crop&crop=center",
-    totalFunding: 30000000,
-    fundedAmount: 30000000,
-    completionDate: "2024-02-10",
-    category: "Technology",
-    status: "Completed",
-    description: "Digital platform for citizen services and municipal operations.",
-    progress: 100,
-    investors: 12,
-    roi: 15.8,
-    impact: "Improved service delivery by 40%"
-  },
-  {
-    id: 4,
-    name: "Water Treatment Plant",
-    municipality: "Chennai Corporation",
-    state: "Tamil Nadu",
-    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center",
-    totalFunding: 120000000,
-    fundedAmount: 120000000,
-    completionDate: "2023-09-30",
-    category: "Water Management",
-    status: "Completed",
-    description: "Advanced water treatment facility with capacity for 50MLD.",
-    progress: 100,
-    investors: 35,
-    roi: 12.7,
-    impact: "Provided clean water to 200,000 residents"
-  }
-]
+// Filter only completed projects
+const mockFundedProjects = mockProjects.filter(project => project.status === "Completed")
 
 export default function ProjectsFunded() {
+  const navigate = useNavigate()
+
+  const handleViewDetails = (projectId: number) => {
+    navigate(`/main/projects/${projectId}`)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -183,7 +123,7 @@ export default function ProjectsFunded() {
                 <p className="text-sm font-medium text-muted-foreground">Total Value</p>
                 <p className="text-2xl font-bold">₹275Cr</p>
               </div>
-              <DollarSign className="h-8 w-8 text-blue-600" />
+              <IndianRupee className="h-8 w-8 text-blue-600" />
             </div>
           </CardContent>
         </Card>
@@ -264,7 +204,7 @@ export default function ProjectsFunded() {
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Total Funding</span>
-                  <span className="font-medium">₹{(project.totalFunding / 10000000).toFixed(1)}Cr</span>
+                  <span className="font-medium">₹{(project.fundRequired / 10000000).toFixed(1)}Cr</span>
                 </div>
                 <Progress value={project.progress} className="h-2" />
                 <div className="text-xs text-green-600 font-medium">
@@ -275,8 +215,8 @@ export default function ProjectsFunded() {
               {/* Performance Metrics */}
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="text-center p-2 bg-green-50 rounded-lg">
-                  <div className="font-bold text-green-600">{project.roi}%</div>
-                  <div className="text-xs text-muted-foreground">ROI</div>
+                  <div className="font-bold text-green-600">18.5%</div>
+                  <div className="text-xs text-muted-foreground">Avg ROI</div>
                 </div>
                 <div className="text-center p-2 bg-blue-50 rounded-lg">
                   <div className="font-bold text-blue-600">{project.investors}</div>
@@ -287,20 +227,23 @@ export default function ProjectsFunded() {
               {/* Impact */}
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="text-sm font-medium text-gray-700 mb-1">Impact</div>
-                <div className="text-sm text-gray-600">{project.impact}</div>
+                <div className="text-sm text-gray-600">Successfully completed with positive community impact</div>
               </div>
               
               {/* Project Details */}
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <div className="flex items-center space-x-2">
                   <Calendar className="h-4 w-4" />
-                  <span>Completed: {new Date(project.completionDate).toLocaleDateString()}</span>
+                  <span>Completed: {project.timeline}</span>
                 </div>
               </div>
               
               {/* Action Buttons */}
               <div className="flex space-x-2 pt-4">
-                <Button className="flex-1">
+                <Button 
+                  className="flex-1"
+                  onClick={() => handleViewDetails(project.id)}
+                >
                   <Eye className="h-4 w-4 mr-2" />
                   View Details
                 </Button>

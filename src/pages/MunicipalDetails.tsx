@@ -8,7 +8,6 @@ import {
   MapPin, 
   TrendingUp, 
   TrendingDown,
-  DollarSign, 
   Users, 
   Building2,
   Award,
@@ -16,7 +15,8 @@ import {
   CheckCircle,
   BarChart3,
   PieChart,
-  LineChart
+  LineChart,
+  IndianRupee
 } from "lucide-react"
 
 const mockMunicipalData = {

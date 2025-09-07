@@ -4,70 +4,27 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useNavigate } from "react-router-dom"
+import { mockProjects } from "@/lib/projects"
 import { 
   Search, 
   Filter, 
   MapPin, 
   Calendar, 
-  DollarSign, 
   Clock,
   Star,
   Eye,
-  Heart
+  Heart,
+  IndianRupee
 } from "lucide-react"
 
-const mockProjects = [
-  {
-    id: 1,
-    name: "Smart Water Management System",
-    municipality: "Mumbai Municipal Corporation",
-    state: "Maharashtra",
-    image: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center",
-    fundRequired: 50000000,
-    currentFunding: 35000000,
-    timeline: "6 months",
-    category: "Infrastructure",
-    status: "Live",
-    description: "Implementation of IoT-based water monitoring and management system across the city.",
-    progress: 70,
-    investors: 15,
-    daysLeft: 45
-  },
-  {
-    id: 2,
-    name: "Solar Street Lighting Project",
-    municipality: "Delhi Municipal Corporation",
-    state: "Delhi",
-    image: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&h=200&fit=crop&crop=center",
-    fundRequired: 25000000,
-    currentFunding: 18000000,
-    timeline: "4 months",
-    category: "Renewable Energy",
-    status: "Live",
-    description: "Installation of solar-powered street lights in residential areas.",
-    progress: 72,
-    investors: 8,
-    daysLeft: 30
-  },
-  {
-    id: 3,
-    name: "Waste Management Modernization",
-    municipality: "Bangalore City Corporation",
-    state: "Karnataka",
-    image: "https://images.unsplash.com/photo-1581578731548-c6a0c3f2f4c1?w=400&h=200&fit=crop&crop=center",
-    fundRequired: 75000000,
-    currentFunding: 45000000,
-    timeline: "8 months",
-    category: "Environment",
-    status: "Live",
-    description: "Modern waste collection and processing facilities with recycling units.",
-    progress: 60,
-    investors: 22,
-    daysLeft: 60
-  }
-]
-
 export default function ProjectsLive() {
+  const navigate = useNavigate()
+
+  const handleViewDetails = (projectId: number) => {
+    navigate(`/main/projects/${projectId}`)
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -207,10 +164,14 @@ export default function ProjectsLive() {
               {/* Action Buttons */}
               <div className="flex space-x-2 pt-4">
                 <Button className="flex-1">
-                  <DollarSign className="h-4 w-4 mr-2" />
+                  <IndianRupee className="h-4 w-4 mr-2" />
                   Fund Project
                 </Button>
-                <Button variant="outline" size="icon">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => handleViewDetails(project.id)}
+                >
                   <Eye className="h-4 w-4" />
                 </Button>
                 <Button variant="outline" size="icon">

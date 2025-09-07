@@ -15,10 +15,10 @@ import {
   MoreHorizontal,
   TrendingUp,
   Users,
-  DollarSign,
   Calendar,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  IndianRupee
 } from "lucide-react"
 
 const mockAdminProjects = [
@@ -138,7 +138,7 @@ export default function AdminProjects() {
                 <p className="text-sm font-medium text-muted-foreground">Total Funding</p>
                 <p className="text-2xl font-bold">₹18Cr</p>
               </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
+              <IndianRupee className="h-8 w-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
