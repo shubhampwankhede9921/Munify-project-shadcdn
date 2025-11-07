@@ -6,7 +6,7 @@ import { Compass, Home, ArrowLeft } from "lucide-react"
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-4">
+    <div className="flex h-screen  justify-center px-4">
       <Card className="w-full max-w-2xl shadow-sm">
         <CardHeader className="space-y-2 text-center">
           <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -49,6 +49,7 @@ export default function NotFound() {
           </div>
         </CardContent>
       </Card>
+      
     </div>
   )
 }

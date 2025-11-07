@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useParams, useNavigate } from "react-router-dom"
+import { useEffect, useState } from "react"
 import { getProjectById } from "@/lib/projects"
 import { 
   MapPin, 
@@ -29,8 +30,17 @@ import {
 export default function ProjectDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState("financials")
   
   const project = getProjectById(parseInt(id || '0'))
+
+  // Handle URL hash to switch to Q&A tab
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash === '#qa') {
+      setActiveTab('qa')
+    }
+  }, [])
   
   if (!project) {
     return (
@@ -127,7 +137,7 @@ export default function ProjectDetails() {
           </Card>
 
           {/* Tabs for Details */}
-          <Tabs defaultValue="financials" className="w-full">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="financials">Financials</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>

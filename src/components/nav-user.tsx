@@ -31,6 +31,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useNavigate } from "react-router-dom"
 
 export function NavUser({
   user,
@@ -42,7 +43,7 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-
+  const navigate = useNavigate()
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -83,29 +84,29 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
+            {/* <DropdownMenuGroup>
               <DropdownMenuItem>
                 <Sparkles />
                 Upgrade to Pro
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator /> */}
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/main/settings")} className="cursor-pointer">
                 <BadgeCheck />
-                Account
+                Profile Settings
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
                 <CreditCard />
                 Billing
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
                 <Bell />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer">
               <LogOut />
               Log out
             </DropdownMenuItem>

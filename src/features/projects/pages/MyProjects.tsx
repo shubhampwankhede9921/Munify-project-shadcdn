@@ -216,7 +216,7 @@ export default function MyProjects() {
               <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="aspect-video bg-gradient-to-r from-blue-500 to-purple-600 relative">
                   <div className="absolute top-4 right-4">
-                    <Badge variant="secondary" className="bg-white/90">
+                    <Badge variant="secondary" className="bg-green-600">
                       {project.status}
                     </Badge>
                   </div>

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -8,95 +8,219 @@ import {
   MapPin, 
   TrendingUp, 
   TrendingDown,
-  Users, 
   Building2,
   Award,
   AlertTriangle,
   CheckCircle,
   BarChart3,
   PieChart,
-  LineChart,
-  IndianRupee
+  ArrowLeft
 } from "lucide-react"
+import { useParams, Link } from "react-router-dom"
+import { useState, useEffect } from "react"
 
-const mockMunicipalData = {
-  name: "Mumbai Municipal Corporation",
-  state: "Maharashtra",
-  population: "12.4M",
-  area: "603.4 sq km",
-  creditRating: "AA+",
-  riskLevel: "Low",
-  financialHealth: 85,
-  governanceScore: 78,
-  infrastructureScore: 82,
-  financials: {
-    totalRevenue: 45000,
-    totalExpenditure: 42000,
-    debtToRevenue: 0.15,
-    operatingSurplus: 3000,
-    capitalExpenditure: 15000,
-    revenueGrowth: 8.5,
-    expenditureGrowth: 6.2
+// Mock data for different municipalities (used for demo until API integration)
+const mockMunicipalData: Record<number, any> = {
+  1: {
+    name: "Mumbai Municipal Corporation",
+    state: "Maharashtra",
+    population: "12.4M",
+    area: "603.4 sq km",
+    creditRating: "AA+",
+    riskLevel: "Low",
+    financialHealth: 85,
+    governanceScore: 78,
+    infrastructureScore: 82,
+    financials: {
+      totalRevenue: 45000,
+      totalExpenditure: 42000,
+      debtToRevenue: 0.15,
+      operatingSurplus: 3000,
+      capitalExpenditure: 15000,
+      revenueGrowth: 8.5,
+      expenditureGrowth: 6.2
+    },
+    projects: {
+      total: 45,
+      completed: 32,
+      ongoing: 8,
+      planned: 5,
+      totalValue: 2500000000
+    },
+    keyMetrics: [
+      { label: "Revenue Growth", value: "8.5%", trend: "up", change: "+2.1%" },
+      { label: "Debt Ratio", value: "15%", trend: "down", change: "-3.2%" },
+      { label: "Operating Surplus", value: "₹3,000Cr", trend: "up", change: "+12.5%" },
+      { label: "Project Completion", value: "71%", trend: "up", change: "+5.3%" }
+    ],
+    recentProjects: [
+      { name: "Smart Water Management", status: "Completed", value: 50000000, year: 2023 },
+      { name: "Solar Street Lighting", status: "Ongoing", value: 25000000, year: 2024 },
+      { name: "Waste Management", status: "Completed", value: 75000000, year: 2023 },
+      { name: "Road Infrastructure", status: "Planned", value: 100000000, year: 2024 }
+    ],
+    strengths: [
+      "Strong revenue base with diversified income sources",
+      "Excellent project execution track record",
+      "Low debt-to-revenue ratio",
+      "Proactive governance and transparency"
+    ],
+    challenges: [
+      "High population density affecting service delivery",
+      "Aging infrastructure requiring significant investment",
+      "Climate change adaptation needs",
+      "Regulatory compliance requirements"
+    ]
   },
-  projects: {
-    total: 45,
-    completed: 32,
-    ongoing: 8,
-    planned: 5,
-    totalValue: 2500000000
-  },
-  keyMetrics: [
-    { label: "Revenue Growth", value: "8.5%", trend: "up", change: "+2.1%" },
-    { label: "Debt Ratio", value: "15%", trend: "down", change: "-3.2%" },
-    { label: "Operating Surplus", value: "₹3,000Cr", trend: "up", change: "+12.5%" },
-    { label: "Project Completion", value: "71%", trend: "up", change: "+5.3%" }
-  ],
-  recentProjects: [
-    { name: "Smart Water Management", status: "Completed", value: 50000000, year: 2023 },
-    { name: "Solar Street Lighting", status: "Ongoing", value: 25000000, year: 2024 },
-    { name: "Waste Management", status: "Completed", value: 75000000, year: 2023 },
-    { name: "Road Infrastructure", status: "Planned", value: 100000000, year: 2024 }
-  ],
-  strengths: [
-    "Strong revenue base with diversified income sources",
-    "Excellent project execution track record",
-    "Low debt-to-revenue ratio",
-    "Proactive governance and transparency"
-  ],
-  challenges: [
-    "High population density affecting service delivery",
-    "Aging infrastructure requiring significant investment",
-    "Climate change adaptation needs",
-    "Regulatory compliance requirements"
-  ]
+  2: {
+    name: "Delhi Municipal Corporation",
+    state: "Delhi",
+    population: "16.8M",
+    area: "1,484 sq km",
+    creditRating: "AA",
+    riskLevel: "Low",
+    financialHealth: 82,
+    governanceScore: 75,
+    infrastructureScore: 78,
+    financials: {
+      totalRevenue: 52000,
+      totalExpenditure: 48000,
+      debtToRevenue: 0.18,
+      operatingSurplus: 4000,
+      capitalExpenditure: 18000,
+      revenueGrowth: 7.2,
+      expenditureGrowth: 5.8
+    },
+    projects: {
+      total: 38,
+      completed: 28,
+      ongoing: 6,
+      planned: 4,
+      totalValue: 2200000000
+    },
+    keyMetrics: [
+      { label: "Revenue Growth", value: "7.2%", trend: "up", change: "+1.8%" },
+      { label: "Debt Ratio", value: "18%", trend: "down", change: "-2.1%" },
+      { label: "Operating Surplus", value: "₹4,000Cr", trend: "up", change: "+8.5%" },
+      { label: "Project Completion", value: "74%", trend: "up", change: "+3.2%" }
+    ],
+    recentProjects: [
+      { name: "Metro Expansion", status: "Ongoing", value: 80000000, year: 2024 },
+      { name: "Air Quality Management", status: "Completed", value: 60000000, year: 2023 },
+      { name: "Smart City Initiative", status: "Ongoing", value: 120000000, year: 2024 },
+      { name: "Water Treatment", status: "Planned", value: 90000000, year: 2024 }
+    ],
+    strengths: [
+      "Capital city with strong administrative support",
+      "Diverse revenue streams including central funding",
+      "Good infrastructure development track record",
+      "Strong governance framework"
+    ],
+    challenges: [
+      "High population density and urban sprawl",
+      "Air pollution and environmental concerns",
+      "Complex administrative structure",
+      "High maintenance costs for existing infrastructure"
+    ]
+  }
+  // Add more municipalities as needed
 }
 
 export default function MunicipalDetails() {
+  const { id } = useParams<{ id: string }>()
+  const [municipalData, setMunicipalData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Simulate API call
+    const fetchMunicipalData = async () => {
+      setLoading(true)
+      try {
+        // In real app, this would be an API call
+        const data = mockMunicipalData[Number(id)]
+        if (data) {
+          setMunicipalData(data)
+        } else {
+          // Handle municipality not found
+          setMunicipalData(null)
+        }
+      } catch (error) {
+        console.error("Error fetching municipal data:", error)
+        setMunicipalData(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (id) {
+      fetchMunicipalData()
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading municipality details...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!municipalData) {
+    return (
+      <div className="text-center py-12">
+        <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h2 className="text-2xl font-bold mb-2">Municipality Not Found</h2>
+        <p className="text-muted-foreground mb-4">
+          The municipality you're looking for doesn't exist or has been removed.
+        </p>
+        <Link to="/main/municipalities">
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Municipalities
+          </Button>
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
+      {/* Back Button */}
+      <div className="flex items-center">
+        <Link to="/main/municipalities">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Municipalities
+          </Button>
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{mockMunicipalData.name}</h1>
+          <h1 className="text-3xl font-bold">{municipalData.name}</h1>
           <p className="text-muted-foreground flex items-center">
             <MapPin className="h-4 w-4 mr-1" />
-            {mockMunicipalData.state} • Population: {mockMunicipalData.population} • Area: {mockMunicipalData.area}
+            {municipalData.state} • Population: {municipalData.population} • Area: {municipalData.area}
           </p>
         </div>
         <div className="flex items-center space-x-2">
           <Badge variant="secondary" className="bg-green-100 text-green-800">
             <Award className="h-3 w-3 mr-1" />
-            {mockMunicipalData.creditRating}
+            {municipalData.creditRating}
           </Badge>
           <Badge variant="outline">
-            {mockMunicipalData.riskLevel} Risk
+            {municipalData.riskLevel} Risk
           </Badge>
         </div>
       </div>
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {mockMunicipalData.keyMetrics.map((metric, index) => (
+        {municipalData.keyMetrics.map((metric: any, index: number) => (
           <Card key={index}>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -141,19 +265,19 @@ export default function MunicipalDetails() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Total Revenue</span>
                     <span className="text-2xl font-bold text-green-600">
-                      ₹{mockMunicipalData.financials.totalRevenue.toLocaleString()}
+                      ₹{municipalData.financials.totalRevenue.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Total Expenditure</span>
                     <span className="text-2xl font-bold text-red-600">
-                      ₹{mockMunicipalData.financials.totalExpenditure.toLocaleString()}
+                      ₹{municipalData.financials.totalExpenditure.toLocaleString()}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Operating Surplus</span>
                     <span className="text-2xl font-bold text-blue-600">
-                      ₹{mockMunicipalData.financials.operatingSurplus.toLocaleString()}
+                      ₹{municipalData.financials.operatingSurplus.toLocaleString()}
                     </span>
                   </div>
                 </div>
@@ -169,27 +293,27 @@ export default function MunicipalDetails() {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Overall Financial Health</span>
-                    <span>{mockMunicipalData.financialHealth}%</span>
+                    <span>{municipalData.financialHealth}%</span>
                   </div>
-                  <Progress value={mockMunicipalData.financialHealth} className="h-3" />
+                  <Progress value={municipalData.financialHealth} className="h-3" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Debt-to-Revenue Ratio</span>
-                    <span>{(mockMunicipalData.financials.debtToRevenue * 100).toFixed(1)}%</span>
+                    <span>{(municipalData.financials.debtToRevenue * 100).toFixed(1)}%</span>
                   </div>
-                  <Progress value={mockMunicipalData.financials.debtToRevenue * 100} className="h-3" />
+                  <Progress value={municipalData.financials.debtToRevenue * 100} className="h-3" />
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
                     <div className="text-2xl font-bold text-green-600">
-                      {mockMunicipalData.financials.revenueGrowth}%
+                      {municipalData.financials.revenueGrowth}%
                     </div>
                     <div className="text-sm text-muted-foreground">Revenue Growth</div>
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-blue-600">
-                      {mockMunicipalData.financials.expenditureGrowth}%
+                      {municipalData.financials.expenditureGrowth}%
                     </div>
                     <div className="text-sm text-muted-foreground">Expenditure Growth</div>
                   </div>
@@ -210,28 +334,28 @@ export default function MunicipalDetails() {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-blue-600">{mockMunicipalData.projects.total}</div>
+                      <div className="text-3xl font-bold text-blue-600">{municipalData.projects.total}</div>
                       <div className="text-sm text-muted-foreground">Total Projects</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-green-600">{mockMunicipalData.projects.completed}</div>
+                      <div className="text-3xl font-bold text-green-600">{municipalData.projects.completed}</div>
                       <div className="text-sm text-muted-foreground">Completed</div>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-orange-600">{mockMunicipalData.projects.ongoing}</div>
+                      <div className="text-3xl font-bold text-orange-600">{municipalData.projects.ongoing}</div>
                       <div className="text-sm text-muted-foreground">Ongoing</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-3xl font-bold text-purple-600">{mockMunicipalData.projects.planned}</div>
+                      <div className="text-3xl font-bold text-purple-600">{municipalData.projects.planned}</div>
                       <div className="text-sm text-muted-foreground">Planned</div>
                     </div>
                   </div>
                   <Separator />
                   <div className="text-center">
                     <div className="text-2xl font-bold">
-                      ₹{(mockMunicipalData.projects.totalValue / 100000000).toFixed(1)}Cr
+                      ₹{(municipalData.projects.totalValue / 100000000).toFixed(1)}Cr
                     </div>
                     <div className="text-sm text-muted-foreground">Total Project Value</div>
                   </div>
@@ -246,7 +370,7 @@ export default function MunicipalDetails() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {mockMunicipalData.recentProjects.map((project, index) => (
+                  {municipalData.recentProjects.map((project: any, index: number) => (
                     <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                       <div>
                         <div className="font-medium">{project.name}</div>
@@ -279,23 +403,23 @@ export default function MunicipalDetails() {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Overall Governance</span>
-                    <span>{mockMunicipalData.governanceScore}%</span>
+                    <span>{municipalData.governanceScore}%</span>
                   </div>
-                  <Progress value={mockMunicipalData.governanceScore} className="h-3" />
+                  <Progress value={municipalData.governanceScore} className="h-3" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Infrastructure Management</span>
-                    <span>{mockMunicipalData.infrastructureScore}%</span>
+                    <span>{municipalData.infrastructureScore}%</span>
                   </div>
-                  <Progress value={mockMunicipalData.infrastructureScore} className="h-3" />
+                  <Progress value={municipalData.infrastructureScore} className="h-3" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Financial Management</span>
-                    <span>{mockMunicipalData.financialHealth}%</span>
+                    <span>{municipalData.financialHealth}%</span>
                   </div>
-                  <Progress value={mockMunicipalData.financialHealth} className="h-3" />
+                  <Progress value={municipalData.financialHealth} className="h-3" />
                 </div>
               </CardContent>
             </Card>
@@ -312,7 +436,7 @@ export default function MunicipalDetails() {
                     Strengths
                   </h4>
                   <ul className="space-y-1 text-sm">
-                    {mockMunicipalData.strengths.map((strength, index) => (
+                    {municipalData.strengths.map((strength: string, index: number) => (
                       <li key={index} className="flex items-start">
                         <span className="text-green-600 mr-2">•</span>
                         {strength}
@@ -327,7 +451,7 @@ export default function MunicipalDetails() {
                     Challenges
                   </h4>
                   <ul className="space-y-1 text-sm">
-                    {mockMunicipalData.challenges.map((challenge, index) => (
+                    {municipalData.challenges.map((challenge: string, index: number) => (
                       <li key={index} className="flex items-start">
                         <span className="text-orange-600 mr-2">•</span>
                         {challenge}

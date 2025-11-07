@@ -1,5 +1,5 @@
 import * as React from "react"
-import { LayoutDashboard, FolderKanban, Building2, Settings, Wrench, GalleryVerticalEnd, Map, PieChart } from "lucide-react"
+import { LayoutDashboard, FolderKanban, Building2, Settings, Wrench, GalleryVerticalEnd, Table, Shield } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
 import { NavProjects } from "@/components/nav-projects"
@@ -56,16 +56,26 @@ const data = {
         { title: "Funded Projects", url: "/main/projects/funded" },
         { title: "My Projects", url: "/main/projects/my" },
         { title: "Favorites", url: "/main/projects/favorites" },
+        { title: "Card Designs", url: "/main/designs/cards" },
       ],
     },
     {
-      title: "Municipal",
-      url: "/main/municipal",
-      icon: Building2,
+	      title: "Municipalities",
+	      url: "/main/municipalities",
+	      icon: Building2,
+	      items: [
+			{ title: "All Municipalities", url: "/main/municipalities" },
+			{ title: "Credit Ratings", url: "/main/municipal/ratings" },
+			{ title: "Financial Analysis", url: "/main/municipal/analysis" },
+	      ],
+    },
+    {
+      title: "Master",
+      url: "/main/master",
+      icon: Shield,
       items: [
-        { title: "All Municipalities", url: "/main/municipal" },
-        { title: "Credit Ratings", url: "/main/municipal/ratings" },
-        { title: "Financial Analysis", url: "/main/municipal/analysis" },
+        { title: "Roles Management", url: "/main/master/roles" },
+        { title: "Organizations Management", url: "/main/master/organizations" },
       ],
     },
     {
@@ -74,9 +84,20 @@ const data = {
       icon: Settings,
       items: [
         { title: "Project Management", url: "/main/admin/projects" },
+        { title: "Validate Projects", url: "/main/admin/projects/validate" },
         { title: "User Management", url: "/main/admin/users" },
+        { title: "Invitations Management", url: "/main/admin/invitations" },
+        { title: "Send Invitation", url: "/main/admin/invitation" },
         { title: "Notifications", url: "/main/admin/notifications" },
         { title: "Reports", url: "/main/admin/reports" },
+      ],
+    },
+    {
+      title: "Components",
+      url: "/main/components",
+      icon: Table,
+      items: [
+        { title: "Data Table", url: "/main/components/datatable" },
       ],
     },
   ],
