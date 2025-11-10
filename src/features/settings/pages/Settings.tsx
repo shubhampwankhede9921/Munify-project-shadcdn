@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useParams } from "react-router-dom"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -43,24 +44,32 @@ interface ChangePasswordRequest {
 
 export default function Settings() {
   const queryClient = useQueryClient()
+  const { userId: routeUserId } = useParams<{ userId: string }>()
   const [activeTab, setActiveTab] = useState<"profile" | "password">("profile")
   const [isEditing, setIsEditing] = useState(false)
   const [otpRequestedFor, setOtpRequestedFor] = useState<string>("")
 
-  // TODO: Replace with actual API call when ready
-  // For now, using hardcoded profile data
-  const hardcodedProfile: UserProfile = {
-    id: 1,
-    fullName: "Shubham Wankhede",
-    userId: "shubhamw20",
-    email: "shubham.wankhede@munify.ai",
-    mobileNumber: "9876543210",
-  }
-
-  // Mock query - replace with actual useQuery when API is ready
-  const profile = hardcodedProfile
-  const loadingProfile = false
-  const profileError = false
+  // Fetch profile from FastAPI using userId from the route
+  const {
+    data: profile,
+    isLoading: loadingProfile,
+    isError: profileError,
+  } = useQuery({
+    queryKey: ["user-profile", routeUserId],
+    enabled: !!routeUserId,
+    queryFn: async () => {
+      const response = await apiService.get(`/users/perdix/${routeUserId}`)
+      const payload: any = response?.data?.data ?? response?.data ?? response
+      const mapped: UserProfile = {
+        id: payload?.id ?? payload?.user_id,
+        fullName: payload?.userName,
+        userId: payload?.userId ?? payload?.username ?? payload?.user_id ?? routeUserId ?? "",
+        email: payload?.email ?? "",
+        mobileNumber: payload?.mobileNumber ?? payload?.mobile_number ?? payload?.phone ?? "",
+      }
+      return mapped
+    },
+  })
 
   // Profile form state
   const [profileForm, setProfileForm] = useState<UserProfile>({
@@ -70,8 +79,9 @@ export default function Settings() {
     mobileNumber: "",
   })
 
-  // Initialize form with hardcoded profile data
+  // Initialize form with fetched profile data
   useEffect(() => {
+    if (!profile) return
     setProfileForm({
       fullName: profile.fullName || "",
       userId: profile.userId || "",
@@ -149,23 +159,21 @@ export default function Settings() {
   }
 
   // Update profile mutation
-  // TODO: Replace with actual API call when ready
   const updateProfileMutation = useMutation({
     mutationFn: async (data: UserProfile) => {
-      // TODO: Uncomment when API is ready
-      // return await apiService.put<UserProfile>("/user/profile", data)
-      
-      // Mock update for now - simulate API delay
-      return new Promise<UserProfile>((resolve) => {
-        setTimeout(() => resolve(data), 500)
-      })
+      // Assuming update endpoint accepts userId in path in the same resource
+      // Adjust if your API differs
+      return await apiService.put<UserProfile>(`/users/perdix/${data.userId}`, data)
     },
     onSuccess: (data) => {
-      // Update local hardcoded profile (will be replaced with query invalidation when API is ready)
-      // queryClient.invalidateQueries({ queryKey: ["user-profile"] })
-      
-      // Update form with new data
-      setProfileForm(data)
+      queryClient.invalidateQueries({ queryKey: ["user-profile", routeUserId] })
+      // Update form with returned data
+      setProfileForm({
+        fullName: data?.fullName || "",
+        userId: data?.userId || routeUserId || "",
+        email: data?.email || "",
+        mobileNumber: data?.mobileNumber || "",
+      })
       alerts.success("Profile Updated", "Your profile has been updated successfully")
       setIsEditing(false)
     },
