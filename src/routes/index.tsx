@@ -77,7 +77,7 @@ export const router = createBrowserRouter([
       { path: "admin/invitations", element: <InvitationsManagement /> },
       { path: "admin/invitation", element: <AdminInvitation /> },
       { path: "admin/reports", element: <AdminReports /> },
-      { path: "settings", element: <Settings /> },
+      { path: "settings/:userId", element: <Settings /> },
       { path: "demo", element: <Projects /> },
       { path: "designs/cards", element: <CardShowcase /> },
       { path: "components/datatable", element: <DataTableReference /> },
