@@ -1,68 +1,373 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Search, UserPlus } from "lucide-react"
+import { useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Users } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { DataTable, type ColumnDef } from '@/components/data-table/data-table'
+import apiService from '@/services/api'
+import { alerts } from '@/lib/alerts'
 
-const mockUsers = [
-  { id: 1, name: "Admin User", email: "admin@munify.in", role: "Admin", status: "Active" },
-  { id: 2, name: "Lender One", email: "lender1@munify.in", role: "Lender", status: "Active" },
-  { id: 3, name: "Municipal Officer", email: "officer@munify.in", role: "Municipal", status: "Pending" },
-]
+interface User {
+  id: number
+  version: number
+  login: string
+  password: string | null
+  userName: string
+  changePasswordOnLogin: boolean
+  firstName: string | null
+  lastName: string | null
+  email: string
+  langKey: string
+  roleCode: string
+  activated: boolean
+  roles: string | null
+  branchSetCode: string | null
+  bankName: string
+  branchName: string
+  agentAmtLimit: number | null
+  imeiNumber: string
+  branchId: number
+  branchCode: string | null
+  userState: string
+  activeBranch: string
+  activeBranchId: number
+  userType: string
+  mobileNumber: string
+  landlineNumber: string | null
+  validUntil: string
+  lastPasswordUpdatedOn: string
+  accessType: string
+  customerId: number | null
+  villageName: string | null
+  editCheckerAccess: boolean
+  agentAllVillageAccess: boolean
+  urnNo: string | null
+  agentId: number | null
+  employeeId: number | null
+  mobileNumber2: string | null
+  userRoles: any[]
+  userBranches: any[]
+  partnerCode: string | null
+  otp: string | null
+  otpPurpose: string | null
+  allowedDevices: any | null
+  userAccountLockStatus: string | null
+  accountLockedAt: string | null
+  accountLockReason: string | null
+  imeiOverrideRequired: boolean
+  mfaToken: string | null
+  mfaTokenExpired: boolean | null
+  mfaRequired: boolean
+  photoImageId: number | null
+  externalSystemCode: string | null
+  apiUser: boolean
+  hsmUserId: string | null
+}
+
+interface UsersApiResponse {
+  status: string
+  message: string
+  data: User[]
+}
 
 export default function AdminUsers() {
+  const [branchName] = useState('Head Office')
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(10)
+  const tableRef = useRef<any>(null)
+  const usersRef = useRef<User[]>([])
+  const pageRef = useRef(1)
+  const perPageRef = useRef(10)
+
+  // Query for users
+  const { data, isLoading, error, isError } = useQuery<UsersApiResponse>({
+    queryKey: ['users', branchName, page, perPage],
+    queryFn: async () => {
+      try {
+        return await apiService.get<UsersApiResponse>('/users/perdix', {
+          branch_name: branchName,
+          page,
+          per_page: perPage,
+        })
+      } catch (err: any) {
+        // Extract error message
+        let errorMessage = 'Failed to fetch users. Please try again.'
+        const status = err?.response?.status
+        const errorData = err?.response?.data
+        
+        if (status === 503) {
+          // 503 Service Temporarily Unavailable
+          errorMessage = 'Service temporarily unavailable. The server is down or overloaded. Please try again later.'
+        } else if (status === 422) {
+          // 422 Unprocessable Entity - validation error
+          if (errorData?.message) {
+            // Check if message contains HTML and extract text
+            const message = errorData.message
+            if (message.includes('<html>') || message.includes('<title>')) {
+              // Extract title from HTML
+              const titleMatch = message.match(/<title>(.*?)<\/title>/i)
+              errorMessage = titleMatch ? titleMatch[1] : 'Validation error occurred'
+            } else {
+              errorMessage = message
+            }
+          } else if (errorData?.detail) {
+            errorMessage = Array.isArray(errorData.detail) 
+              ? errorData.detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ')
+              : String(errorData.detail)
+          } else if (errorData?.error) {
+            errorMessage = errorData.error
+          } else {
+            errorMessage = 'Validation error occurred'
+          }
+        } else if (errorData?.message) {
+          // Check if message contains HTML
+          const message = errorData.message
+          if (message.includes('<html>') || message.includes('<title>')) {
+            const titleMatch = message.match(/<title>(.*?)<\/title>/i)
+            errorMessage = titleMatch ? titleMatch[1] : 'Server error occurred'
+          } else {
+            errorMessage = message
+          }
+        } else if (err?.message) {
+          errorMessage = err.message
+        }
+        
+        // Only show alert once, not on every retry attempt
+        // TanStack Query will handle retries automatically
+        alerts.error('Error', errorMessage)
+        
+        throw err
+      }
+    },
+    retry: (failureCount, error: any) => {
+      // Don't retry on 503 errors to avoid hammering a down server
+      if (error?.response?.status === 503) {
+        return false
+      }
+      // Retry up to 2 times for other errors
+      return failureCount < 2
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+  })
+
+  const users = (data as UsersApiResponse)?.data || []
+
+  // Keep refs in sync with current values
+  usersRef.current = users
+  pageRef.current = page
+  perPageRef.current = perPage
+
+  // Sync table pagination state with server-side pagination
+  useEffect(() => {
+    if (!tableRef.current) return
+
+    const table = tableRef.current
+    const state = table.getState().pagination
+    const expectedPageIndex = page - 1
+
+    // Sync table state when our state changes (from API response)
+    if (state.pageIndex !== expectedPageIndex) {
+      table.setPageIndex(expectedPageIndex)
+    }
+    if (state.pageSize !== perPage) {
+      table.setPageSize(perPage)
+    }
+  }, [page, perPage])
+
+  const getUserStateBadgeVariant = (state: string) => {
+    if (state === 'ACTIVE') return 'secondary'
+    if (state === 'INACTIVE') return 'secondary'
+    return 'outline'
+  }
+
+  const getRoleCodeBadgeVariant = (roleCode: string) => {
+    if (roleCode === 'A') return 'default'
+    if (roleCode === 'L') return 'secondary'
+    return 'outline'
+  }
+
+  const columns: ColumnDef<User, any>[] = [
+    {
+      accessorKey: 'id',
+      header: 'ID',
+      cell: ({ row }) => <span className="font-medium">{row.original.id}</span>,
+      enableSorting: true,
+    },
+    {
+      accessorKey: 'userName',
+      header: 'Name',
+      cell: ({ row }) => <span className="font-medium">{row.original.userName || '-'}</span>,
+    },
+    {
+      accessorKey: 'login',
+      header: 'Login',
+      cell: ({ row }) => <span>{row.original.login}</span>,
+    },
+    {
+      accessorKey: 'email',
+      header: 'Email',
+      cell: ({ row }) => <span>{row.original.email || '-'}</span>,
+    },
+    {
+      accessorKey: 'mobileNumber',
+      header: 'Mobile',
+      cell: ({ row }) => <span>{row.original.mobileNumber || '-'}</span>,
+    },
+    {
+      accessorKey: 'roleCode',
+      header: 'Role',
+      cell: ({ row }) => (
+        <Badge variant={getRoleCodeBadgeVariant(row.original.roleCode)}>
+          {row.original.roleCode}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'userState',
+      header: 'Status',
+      cell: ({ row }) => (
+        <Badge variant={getUserStateBadgeVariant(row.original.userState)}>
+          {row.original.userState}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'branchName',
+      header: 'Organization',
+      cell: ({ row }) => <span>{row.original.branchName || '-'}</span>,
+    },
+    {
+      accessorKey: 'bankName',
+      header: 'Bank',
+      cell: ({ row }) => <span>{row.original.bankName || '-'}</span>,
+    },
+    {
+      accessorKey: 'activated',
+      header: 'Activated',
+      cell: ({ row }) => (
+        <Badge variant="secondary">
+          {row.original.activated ? 'Yes' : 'No'}
+        </Badge>
+      ),
+    },
+  ]
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">User Management</h1>
-          <p className="text-muted-foreground">Manage platform users and roles</p>
+          <p className="text-muted-foreground">Manage platform users from Perdix</p>
         </div>
-        <Button>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Add User
-        </Button>
       </div>
 
-      <Card>
-        <CardContent className="p-6">
-          <div className="relative max-w-xl">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input placeholder="Search users..." className="pl-10" />
-          </div>
-        </CardContent>
-      </Card>
+      {isError && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {(error as any)?.response?.status === 503 
+              ? 'Service temporarily unavailable. The server is down or overloaded. Please try again later.'
+              : error?.message || 'Failed to fetch users. Please try again.'}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>All Users</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockUsers.map((u) => (
-                <TableRow key={u.id}>
-                  <TableCell>{u.name}</TableCell>
-                  <TableCell>{u.email}</TableCell>
-                  <TableCell><Badge variant="outline">{u.role}</Badge></TableCell>
-                  <TableCell>
-                    <Badge variant={u.status === "Active" ? "secondary" : "outline"}>{u.status}</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Loading users...</div>
+        </div>
+      ) : users.length === 0 ? (
+        <div className="text-center py-8">
+          <Users className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-2 text-sm font-semibold text-gray-900">No users found</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            No users available for the selected branch.
+          </p>
+        </div>
+      ) : (
+        <DataTable<User, any>
+          title="All Users"
+          description={`Users from ${branchName} organization`}
+          columns={columns}
+          data={users}
+          showToolbar={true}
+          showFooter={true}
+          enableExport={true}
+          exportFilename="users.csv"
+          globalFilterPlaceholder="Search users..."
+          pageSize={perPage}
+          onTableReady={(table) => {
+            tableRef.current = table
+            
+            // Set initial pagination state
+            table.setPageIndex(page - 1)
+            table.setPageSize(perPage)
+            
+            // Override pagination methods to trigger server-side pagination
+            const originalSetPageIndex = table.setPageIndex.bind(table)
+            const originalNextPage = table.nextPage.bind(table)
+            const originalPreviousPage = table.previousPage.bind(table)
+            const originalSetPageSize = table.setPageSize.bind(table)
+            
+            // Override getCanNextPage - enable if we have full page of results (might be more)
+            table.getCanNextPage = () => {
+              return usersRef.current.length === perPageRef.current
+            }
+            
+            // Override getCanPreviousPage - enable if not on first page
+            table.getCanPreviousPage = () => {
+              return pageRef.current > 1
+            }
+            
+            // Override setPageIndex
+            table.setPageIndex = (updater: any) => {
+              const newIndex = typeof updater === 'function' 
+                ? updater(pageRef.current - 1)
+                : updater
+              setPage(newIndex + 1)
+              originalSetPageIndex(newIndex)
+            }
+            
+            // Override nextPage
+            table.nextPage = () => {
+              if (usersRef.current.length === perPageRef.current) {
+                setPage(pageRef.current + 1)
+              } else {
+                originalNextPage()
+              }
+            }
+            
+            // Override previousPage
+            table.previousPage = () => {
+              if (pageRef.current > 1) {
+                setPage(pageRef.current - 1)
+              } else {
+                originalPreviousPage()
+              }
+            }
+            
+            // Override setPageSize
+            table.setPageSize = (updater: any) => {
+              // Calculate the new page size
+              let newSize: number
+              if (typeof updater === 'function') {
+                const currentSize = table.getState().pagination.pageSize
+                newSize = updater(currentSize)
+              } else {
+                newSize = Number(updater)
+              }
+              
+              // Update table's internal state first
+              originalSetPageSize(newSize)
+              
+              // Then update our state to trigger API call
+              if (newSize !== perPageRef.current) {
+                setPerPage(newSize)
+                setPage(1) // Reset to first page when page size changes
+              }
+            }
+          }}
+        />
+      )}
     </div>
   )
 }
