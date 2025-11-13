@@ -1,198 +1,138 @@
 # Munify - Municipal Funding Platform
 
-A modern, enterprise-grade municipal funding platform built with React, TypeScript, and shadcn/ui. Munify connects municipal commissioners with funders to enable transparent financing of municipal projects across India.
+A modern municipal funding platform built with React, TypeScript, and shadcn/ui. Munify connects municipal commissioners with funders to enable transparent financing of municipal projects.
 
-## 🏗️ Project Overview
-
-Munify is India's first national municipal database and funding platform, designed to facilitate transparent information sharing, communication, and timely alerts among various stakeholders involved in municipal projects. The platform serves as a bridge between municipal commissioners (borrowers and grantees) and funders (lenders) without handling actual fund flows.
-
-## ✨ Key Features
-
-### 🏛️ Municipal Management
-- **Credit Ratings & Analysis**: Comprehensive municipal credit scores and financial analysis
-- **Financial Health Indicators**: Revenue trends, expenditure breakdown, debt ratios
-- **Project Portfolio**: Track completed, ongoing, and planned municipal projects
-- **Governance Scores**: Overall governance, infrastructure management, and financial management metrics
-
-### 💰 Project Funding
-- **Live Projects**: Real-time project tracking with funding progress
-- **Project Details**: Comprehensive project information with financials, documents, media, and Q&A
-- **Investment Tracking**: Portfolio management for individual investors
-- **Favorites & Shortlisting**: Save and manage projects of interest
-
-### 👥 User Management
-- **Multi-Role Support**: Lenders, Municipal Commissioners, Consultants, and Administrators
-- **Authentication**: Secure login and registration with social login options
-- **User Dashboard**: Personalized views based on user roles
-
-### 🔧 Admin Features
-- **Project Management**: Add, update, and monitor all platform projects
-- **User Management**: Manage platform users and roles
-- **Notification System**: Send and manage notifications to users
-- **Reports & Analytics**: Generate comprehensive platform reports
-
-## 🛠️ Technology Stack
-
-### Frontend
-- **React 19** - Modern React with latest features
-- **TypeScript** - Type-safe development
-- **Vite** - Fast build tool and dev server
-- **React Router DOM** - Client-side routing
-
-### UI & Styling
-- **shadcn/ui** - Modern, accessible component library
-- **Radix UI** - Headless UI primitives
-- **Tailwind CSS** - Utility-first CSS framework
-- **Lucide React** - Beautiful, customizable icons
-
-### Form Management
-- **React Hook Form** - Performant forms with easy validation
-- **Zod** - TypeScript-first schema validation
-- **@hookform/resolvers** - Form validation resolvers
-
-### Development Tools
-- **ESLint** - Code linting and formatting
-- **TypeScript ESLint** - TypeScript-specific linting rules
-- **PostCSS** - CSS processing
-- **Autoprefixer** - CSS vendor prefixing
-
-## 📁 Project Structure
-
-```
-src/
-├── components/           # Reusable UI components
-│   ├── ui/              # shadcn/ui components
-│   ├── app-sidebar.tsx  # Main navigation sidebar
-│   ├── Copyright.tsx    # Copyright component with Dvara logo
-│   └── index.ts         # Component exports
-├── layouts/             # Layout components
-│   └── AppLayout.tsx    # Main application layout
-├── pages/               # Page components
-│   ├── Landing.tsx      # Landing page
-│   ├── Login.tsx        # Authentication pages
-│   ├── Register.tsx     # User registration
-│   ├── Dashboard.tsx    # Main dashboard
-│   ├── Projects*.tsx    # Project-related pages
-│   ├── Municipal*.tsx   # Municipal management pages
-│   ├── Admin*.tsx       # Admin management pages
-│   └── index.ts         # Page exports
-├── routes/              # Routing configuration
-│   └── index.tsx        # React Router setup
-├── hooks/               # Custom React hooks
-├── lib/                 # Utility functions
-├── assets/              # Static assets
-│   └── logo-big.png     # Dvara Solutions logo
-└── styles/              # Global styles
-```
-
-## 🚀 Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
-- npm or yarn
+- Node.js 18 or higher
+- npm or yarn package manager
 
-### Installation
+### Installation Steps
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd munify-app
+1. **Install dependencies**
    ```
-
-2. **Install dependencies**
-   ```bash
    npm install
    ```
 
+2. **Set up environment variables** (Optional)
+   Create a `.env` file in the root directory with:
+   ```
+   VITE_API_BASE_URL=http://localhost:8000/api/v1
+   VITE_PERDIX_JWT=your_jwt_token_here
+   ```
+
 3. **Start development server**
-   ```bash
+   ```
    npm run dev
    ```
 
 4. **Open in browser**
    Navigate to `http://localhost:5173`
 
-### Available Scripts
+## 📦 Technology Stack
+
+### Core Framework
+- **React 19** - UI library
+- **TypeScript 5.8** - Type-safe JavaScript
+- **Vite 7** - Build tool and dev server
+
+### UI & Styling
+- **shadcn/ui** - Component library
+- **Radix UI** - Accessible UI primitives
+- **Tailwind CSS 3.4** - Utility-first CSS
+- **Lucide React** - Icon library
+
+### State Management & Data
+- **TanStack Query 5** - Server state management
+- **TanStack Table 8** - Data table component
+- **Axios 1.12** - HTTP client
+
+### Forms & Validation
+- **React Hook Form 7** - Form management
+- **Zod 3** - Schema validation
+- **@hookform/resolvers** - Form validation resolvers
+
+### Routing
+- **React Router DOM 7** - Client-side routing
+
+### Utilities
+- **SweetAlert2** - Alert dialogs
+- **date-fns 4** - Date utilities
+- **class-variance-authority** - Component variants
+- **clsx & tailwind-merge** - CSS class utilities
+
+### Development Tools
+- **ESLint 9** - Code linting
+- **TypeScript ESLint** - TypeScript linting
+- **PostCSS** - CSS processing
+- **Autoprefixer** - CSS vendor prefixes
+
+## 📁 Project Structure
+
+```
+src/
+├── components/        # Reusable UI components
+│   ├── ui/           # shadcn/ui components
+│   └── data-table/   # Data table component
+├── features/         # Feature-based modules
+│   ├── admin/       # Admin pages
+│   ├── auth/        # Authentication pages
+│   ├── dashboard/   # Dashboard
+│   ├── master/      # Master data management
+│   ├── municipalities/ # Municipal pages
+│   ├── projects/    # Project pages
+│   ├── settings/    # Settings pages
+│   └── users/       # User management
+├── layouts/         # Layout components
+├── pages/           # Page components
+├── routes/          # Route configuration
+├── services/        # API services
+├── lib/             # Utilities and helpers
+├── hooks/           # Custom React hooks
+└── assets/          # Static assets
+```
+
+## 🛠️ Available Scripts
 
 - `npm run dev` - Start development server
 - `npm run build` - Build for production
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
-## 🎨 Design System
-
-### Color Palette
-- **Primary**: Blue tones for main actions and branding
-- **Secondary**: Slate tones for supporting elements
-- **Accent**: Lime green for highlights and success states
-- **Neutral**: Gray scale for text and backgrounds
-
-### Components
-Built with shadcn/ui components including:
-- Buttons, Cards, Tables, Forms
-- Navigation, Sidebar, Modals
-- Progress indicators, Badges, Alerts
-- Data visualization components
-
-## 📱 Pages & Routes
+## 🌐 Application Routes
 
 ### Public Routes
 - `/` - Landing page
 - `/login` - User login
 - `/register` - User registration
+- `/forgot-password` - Password recovery
 
 ### Protected Routes (`/main/*`)
 - `/main` - Dashboard
 - `/main/projects/*` - Project management
-- `/main/municipal/*` - Municipal data and analysis
+- `/main/municipalities/*` - Municipal data
+- `/main/master/*` - Master data management
 - `/main/admin/*` - Administrative functions
-- `/main/settings` - User settings
+- `/main/settings/:userId` - User settings
 
-## 🔐 Authentication
+## 🔧 Configuration
 
-The platform supports multiple user roles:
-- **Lenders/Investors**: Can browse and fund projects
-- **Municipal Commissioners**: Can manage municipal projects
-- **Consultants**: Can provide advisory services
-- **Administrators**: Full platform management access
+### API Configuration
+The application uses `apiService` from `@/services/api` for all API calls. The base URL is configured via `VITE_API_BASE_URL` environment variable (defaults to `http://localhost:8000/api/v1`).
 
-## 📊 Data Management
+### Theme
+The application supports light/dark themes with system preference detection.
 
-### Mock Data
-Currently uses mock data for demonstration:
-- Municipal financial data
-- Project information and funding status
-- User profiles and roles
-- Notification templates
+## 📝 Development Guidelines
 
-### Future Integration
-Ready for integration with:
-- REST APIs
-- GraphQL endpoints
-- Real-time data streams
-- External municipal databases
+- Follow the patterns in `DEVELOPMENT_PROMPT.md` for consistency
+- Use TypeScript for all new code
+- Follow the feature-based folder structure
+- Use shadcn/ui components exclusively
+- Use TanStack Query for data fetching
+- Use `alerts.success()` and `alerts.error()` for user feedback
 
-## 🎯 Key Features Implementation
+## 📄 License
 
-### Real-time Updates
-- Project funding progress tracking
-- Live notifications system
-- Dynamic data updates
-
-### Search & Filtering
-- Global search across projects and municipalities
-- Advanced filtering by category, status, location
-- Real-time search results
-
-### Responsive Design
-- Mobile-first approach
-- Tablet and desktop optimizations
-- Touch-friendly interactions
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+Private project - All rights reserved
