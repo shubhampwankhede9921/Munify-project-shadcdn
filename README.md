@@ -19,7 +19,6 @@ A modern municipal funding platform built with React, TypeScript, and shadcn/ui.
    Create a `.env` file in the root directory with:
    ```
    VITE_API_BASE_URL=http://localhost:8000/api/v1
-   VITE_PERDIX_JWT=your_jwt_token_here
    ```
 
 3. **Start development server**
