@@ -84,6 +84,7 @@ const data = {
       icon: Settings,
       items: [
         { title: "Project Management", url: "/main/admin/projects" },
+        { title: "Create Project", url: "/main/admin/projects/create" },
         { title: "Validate Projects", url: "/main/admin/projects/validate" },
         { title: "User Management", url: "/main/admin/users" },
         { title: "Invitations Management", url: "/main/admin/invitations" },

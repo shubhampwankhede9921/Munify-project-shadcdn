@@ -155,18 +155,23 @@ export default function Landing() {
             <div>
               <h3 className="font-semibold mb-4">Resources</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>Documentation</li>
-                <li>API Access</li>
-                <li>Support</li>
-                <li>Partnership</li>
+                <li>Liabrary</li>
+                <li>Muncipal Analysis</li>
+                <li>Muncipal Bonds</li>
+                <li>Munify Ranking</li>
               </ul>
             </div>
             <div>
               <h3 className="font-semibold mb-4">Contact</h3>
               <ul className="space-y-2 text-gray-400">
-                <li>info@munify.in</li>
-                <li>+91 98765 43210</li>
-                <li>Mumbai, India</li>
+                <li className="text-white font-semibold">Address</li>
+                <li>Munify Datatech Private Ltd</li>
+                <li>85/89, Ground Floor, Jayshree Enclave Aspiran Garden,2nd street , KilpaukChennai - 600 010.</li>
+               
+                <li className="text-white font-semibold mt-4">Email</li>
+                <li>contactus@munify.in</li>
+                <li className="text-white font-semibold mt-4">Telephone</li>
+                <li>99592 48111, 98412 85917</li>
               </ul>
             </div>
           </div>
