@@ -16,7 +16,6 @@ import {
   AdminProjects,
   AdminProjectValidation,
   AdminProjectReview,
-  AddProject,
   AdminNotifications,
   AdminUsers,
   AdminReports,
@@ -71,7 +70,7 @@ export const router = createBrowserRouter([
       { path: "admin/projects", element: <AdminProjects /> },
       { path: "admin/projects/validate", element: <AdminProjectValidation /> },
       { path: "admin/projects/validate/:id", element: <AdminProjectReview /> },
-      { path: "admin/projects/add", element: <AddProject /> },
+      
       { path: "admin/projects/create", element: <CreateProject /> },
       // removed AddParty route
       { path: "admin/notifications", element: <AdminNotifications /> },

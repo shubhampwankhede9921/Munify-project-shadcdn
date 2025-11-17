@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { alerts } from '@/lib/alerts'
+import apiService from '@/services/api'
 
 // Project Categories
 const projectCategories = [
@@ -90,8 +92,7 @@ interface FormData {
 
 export default function CreateProject() {
   const navigate = useNavigate()
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isDraftSaving, setIsDraftSaving] = useState(false)
+  const queryClient = useQueryClient()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('identification')
   
@@ -137,6 +138,63 @@ export default function CreateProject() {
     const gap = Math.max(requirement - secured, 0)
     return isFinite(gap) ? gap : 0
   }, [formData.fundingRequirement, formData.alreadySecuredFunds])
+
+  // Helper function to map form data to API payload
+  const mapFormDataToApiPayload = (status: 'draft' | 'pending_validation'): any => {
+    // Convert project stage to lowercase for API
+    const projectStage = formData.stage ? formData.stage.toLowerCase() as 'planning' | 'initiated' | 'in progress' : 'planning'
+    
+    // Format dates for API
+    const startDate = formData.startDate || ''
+    const endDate = formData.endDate || ''
+    
+    // Format fundraising dates (using project dates for now, can be adjusted later)
+    const fundraisingStartDate = startDate ? `${startDate}T00:00:00Z` : undefined
+    const fundraisingEndDate = endDate ? `${endDate}T23:59:59Z` : undefined
+
+    // Get current user email (fallback to contact person email for MVP)
+    const createdBy = formData.contactPersonEmail || 'admin@example.com'
+
+    return {
+      organization_type: 'municipality',
+      organization_id: formData.municipalityId || formData.municipalityCode || 'ORG-001',
+      title: formData.projectTitle,
+      department: formData.department || '',
+      contact_person: formData.contactPersonName,
+      category: formData.category,
+      project_stage: projectStage,
+      description: formData.description,
+      start_date: startDate,
+      end_date: endDate,
+      total_project_cost: formData.totalProjectCost || '0.00',
+      funding_requirement: formData.fundingRequirement || '0.00',
+      already_secured_funds: formData.alreadySecuredFunds || '0.00',
+      currency: 'INR',
+      fundraising_start_date: fundraisingStartDate,
+      fundraising_end_date: fundraisingEndDate,
+      municipality_credit_rating: 'AA', // Default value, can be made configurable later
+      municipality_credit_score: '85.50', // Default value, can be made configurable later
+      status: status,
+      visibility: 'private', // Default to private for MVP
+      approved_by: null, // Will be set by backend on approval
+      admin_notes: '', // Empty for new projects
+      created_by: createdBy,
+    }
+  }
+
+  // Mutation for creating project (only called on Submit for Validation)
+  const createProjectMutation = useMutation({
+    mutationFn: (payload: any) => apiService.post('/projects/', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      alerts.success('Project Submitted', 'Your project has been submitted for validation. It will be reviewed by an admin.')
+      navigate('/main/admin/projects')
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to submit project. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
 
   const handleChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -310,15 +368,8 @@ export default function CreateProject() {
       newErrors.ward = 'Ward is required'
     }
 
-    // Documentation
-    if (!formData.dprFile) {
-      newErrors.dprFile = 'Detailed Project Report (DPR) is required'
-    }
-
-    // Media
-    if (!formData.projectImage) {
-      newErrors.projectImage = 'Project image is required'
-    }
+    // Documentation and Media - Skipped for MVP phase
+    // Will be added in next phase
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -353,36 +404,24 @@ export default function CreateProject() {
           formData.ward.trim()
         )
       case 'documentation':
-        return !!formData.dprFile
+        // Documentation optional for MVP
+        return true
       case 'media':
-        return !!formData.projectImage
+        // Media optional for MVP
+        return true
       default:
         return false
     }
   }
 
-  const handleSaveDraft = async (showMessage = true) => {
-    setIsDraftSaving(true)
-    try {
-      // In real app, this would call the API to save as draft
-      // For now, just show success message
-      await new Promise(resolve => setTimeout(resolve, 500)) // Simulate API call
-      if (showMessage) {
-        alerts.success('Draft Saved', 'Project has been saved as draft. You can continue editing later.')
-      }
-    } catch (error) {
-      if (showMessage) {
-        alerts.error('Error', 'Failed to save draft. Please try again.')
-      }
-    } finally {
-      setIsDraftSaving(false)
-    }
+  const handleSaveDraft = () => {
+    // For MVP: Just show a message that data is saved locally in form state
+    // No API call - data persists in component state until form is submitted
+    alerts.success('Draft Saved', 'Your changes are saved locally. Click "Submit for Validation" when ready to submit.')
   }
 
-  // Auto-save draft when switching tabs
-  const handleTabChange = async (value: string) => {
-    // Save draft before switching tabs (silently)
-    await handleSaveDraft(false)
+  // Handle tab change - just switch tabs, no API call
+  const handleTabChange = (value: string) => {
     setActiveTab(value)
   }
 
@@ -392,19 +431,19 @@ export default function CreateProject() {
   const canGoNext = currentTabIndex < tabs.length - 1
   const canGoPrevious = currentTabIndex > 0
 
-  const goToNextTab = async () => {
+  const goToNextTab = () => {
     if (canGoNext) {
-      await handleTabChange(tabs[currentTabIndex + 1])
+      handleTabChange(tabs[currentTabIndex + 1])
     }
   }
 
-  const goToPreviousTab = async () => {
+  const goToPreviousTab = () => {
     if (canGoPrevious) {
-      await handleTabChange(tabs[currentTabIndex - 1])
+      handleTabChange(tabs[currentTabIndex - 1])
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!validateForm()) {
@@ -412,18 +451,9 @@ export default function CreateProject() {
       return
     }
 
-    setIsSubmitting(true)
-    try {
-      // In real app, this would call the API to submit the project
-      // For now, just show success message
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API call
-      alerts.success('Project Submitted', 'Your project has been submitted for validation. It will be reviewed by an admin.')
-      navigate('/main/admin/projects')
-    } catch (error) {
-      alerts.error('Error', 'Failed to submit project. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
+    // Only API call happens here - on Submit for Validation button click
+    const payload = mapFormDataToApiPayload('pending_validation')
+    createProjectMutation.mutate(payload)
   }
 
   return (
@@ -1317,25 +1347,25 @@ export default function CreateProject() {
             type="button"
             variant="outline"
             onClick={() => navigate('/main/admin/projects')}
-            disabled={isSubmitting || isDraftSaving}
+            disabled={createProjectMutation.isPending}
           >
             Cancel
           </Button>
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleSaveDraft(true)}
-            disabled={isSubmitting || isDraftSaving}
+            onClick={handleSaveDraft}
+            disabled={createProjectMutation.isPending}
           >
             <Save className="h-4 w-4 mr-2" />
-            {isDraftSaving ? 'Saving...' : 'Save as Draft'}
+            Save as Draft
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || isDraftSaving}
+            disabled={createProjectMutation.isPending}
           >
             <Save className="h-4 w-4 mr-2" />
-            {isSubmitting ? 'Submitting...' : 'Submit for Validation'}
+            {createProjectMutation.isPending ? 'Submitting...' : 'Submit for Validation'}
           </Button>
         </div>
       </form>
