@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { DataTable, type ColumnDef } from '@/components/data-table/data-table'
+import type { PaginationState } from '@tanstack/react-table'
 import apiService from '@/services/api'
 import { alerts } from '@/lib/alerts'
 
@@ -72,22 +73,20 @@ interface UsersApiResponse {
 
 export default function AdminUsers() {
   const [branchName] = useState('Head Office')
-  const [page, setPage] = useState(1)
-  const [perPage, setPerPage] = useState(10)
-  const tableRef = useRef<any>(null)
-  const usersRef = useRef<User[]>([])
-  const pageRef = useRef(1)
-  const perPageRef = useRef(10)
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 10,
+  })
 
-  // Query for users
+  // Query for users with server-side pagination
   const { data, isLoading, error, isError } = useQuery<UsersApiResponse>({
-    queryKey: ['users', branchName, page, perPage],
+    queryKey: ['users', branchName, pagination.pageIndex + 1, pagination.pageSize],
     queryFn: async () => {
       try {
         return await apiService.get<UsersApiResponse>('/users/perdix', {
           branch_name: branchName,
-          page,
-          per_page: perPage,
+          page: pagination.pageIndex + 1, // Server uses 1-indexed pages
+          per_page: pagination.pageSize,
         })
       } catch (err: any) {
         // Extract error message
@@ -152,27 +151,9 @@ export default function AdminUsers() {
 
   const users = (data as UsersApiResponse)?.data || []
 
-  // Keep refs in sync with current values
-  usersRef.current = users
-  pageRef.current = page
-  perPageRef.current = perPage
-
-  // Sync table pagination state with server-side pagination
-  useEffect(() => {
-    if (!tableRef.current) return
-
-    const table = tableRef.current
-    const state = table.getState().pagination
-    const expectedPageIndex = page - 1
-
-    // Sync table state when our state changes (from API response)
-    if (state.pageIndex !== expectedPageIndex) {
-      table.setPageIndex(expectedPageIndex)
-    }
-    if (state.pageSize !== perPage) {
-      table.setPageSize(perPage)
-    }
-  }, [page, perPage])
+  // Determine if there's a next page (if current page has full pageSize results, there might be more)
+  const hasNextPage = users.length === pagination.pageSize
+  const pageCount = hasNextPage ? pagination.pageIndex + 2 : pagination.pageIndex + 1
 
   const getUserStateBadgeVariant = (state: string) => {
     if (state === 'ACTIVE') return 'secondary'
@@ -294,77 +275,21 @@ export default function AdminUsers() {
           enableExport={true}
           exportFilename="users.csv"
           globalFilterPlaceholder="Search users..."
-          pageSize={perPage}
-          onTableReady={(table) => {
-            tableRef.current = table
-            
-            // Set initial pagination state
-            table.setPageIndex(page - 1)
-            table.setPageSize(perPage)
-            
-            // Override pagination methods to trigger server-side pagination
-            const originalSetPageIndex = table.setPageIndex.bind(table)
-            const originalNextPage = table.nextPage.bind(table)
-            const originalPreviousPage = table.previousPage.bind(table)
-            const originalSetPageSize = table.setPageSize.bind(table)
-            
-            // Override getCanNextPage - enable if we have full page of results (might be more)
-            table.getCanNextPage = () => {
-              return usersRef.current.length === perPageRef.current
-            }
-            
-            // Override getCanPreviousPage - enable if not on first page
-            table.getCanPreviousPage = () => {
-              return pageRef.current > 1
-            }
-            
-            // Override setPageIndex
-            table.setPageIndex = (updater: any) => {
-              const newIndex = typeof updater === 'function' 
-                ? updater(pageRef.current - 1)
-                : updater
-              setPage(newIndex + 1)
-              originalSetPageIndex(newIndex)
-            }
-            
-            // Override nextPage
-            table.nextPage = () => {
-              if (usersRef.current.length === perPageRef.current) {
-                setPage(pageRef.current + 1)
+          manualPagination={true}
+          pageCount={pageCount}
+          state={{
+            pagination,
+          }}
+          onStateChange={{
+            onPaginationChange: (updater) => {
+              const newPagination = typeof updater === 'function' ? updater(pagination) : updater
+              // Reset to first page when page size changes
+              if (newPagination.pageSize !== pagination.pageSize) {
+                setPagination({ pageIndex: 0, pageSize: newPagination.pageSize })
               } else {
-                originalNextPage()
+                setPagination(newPagination)
               }
-            }
-            
-            // Override previousPage
-            table.previousPage = () => {
-              if (pageRef.current > 1) {
-                setPage(pageRef.current - 1)
-              } else {
-                originalPreviousPage()
-              }
-            }
-            
-            // Override setPageSize
-            table.setPageSize = (updater: any) => {
-              // Calculate the new page size
-              let newSize: number
-              if (typeof updater === 'function') {
-                const currentSize = table.getState().pagination.pageSize
-                newSize = updater(currentSize)
-              } else {
-                newSize = Number(updater)
-              }
-              
-              // Update table's internal state first
-              originalSetPageSize(newSize)
-              
-              // Then update our state to trigger API call
-              if (newSize !== perPageRef.current) {
-                setPerPage(newSize)
-                setPage(1) // Reset to first page when page size changes
-              }
-            }
+            },
           }}
         />
       )}

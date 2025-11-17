@@ -14,6 +14,7 @@ import type {
     VisibilityState,
     Table as TanTable,
     RowSelectionState,
+    PaginationState,
 } from "@tanstack/react-table"
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -42,6 +43,7 @@ export type DataTableProps<TData, TValue> = {
         columnVisibility: VisibilityState
         rowSelection: RowSelectionState
         globalFilter: string
+        pagination: PaginationState
     }>
     onStateChange?: Partial<{
         onSortingChange: (updater: SortingState) => void
@@ -49,8 +51,11 @@ export type DataTableProps<TData, TValue> = {
         onColumnVisibilityChange: (updater: VisibilityState) => void
         onRowSelectionChange: (updater: RowSelectionState) => void
         onGlobalFilterChange: (value: string) => void
+        onPaginationChange: (updater: PaginationState | ((old: PaginationState) => PaginationState)) => void
     }>
     pageSize?: number
+    pageCount?: number
+    manualPagination?: boolean
     showToolbar?: boolean
     showFooter?: boolean
     globalFilterPlaceholder?: string
@@ -68,6 +73,8 @@ export function DataTable<TData, TValue>({
     state,
     onStateChange,
     pageSize = 10,
+    pageCount,
+    manualPagination = false,
     showToolbar = true,
     showFooter = true,
     globalFilterPlaceholder = "Search...",
@@ -80,14 +87,19 @@ export function DataTable<TData, TValue>({
     const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(state?.columnVisibility ?? {})
     const [rowSelection, setRowSelection] = React.useState<RowSelectionState>(state?.rowSelection ?? {})
     const [globalFilter, setGlobalFilter] = React.useState<string>(state?.globalFilter ?? "")
+    const [pagination, setPagination] = React.useState<PaginationState>(
+        state?.pagination ?? { pageIndex: 0, pageSize }
+    )
 
     const table = useReactTable({
         data,
         columns,
         getCoreRowModel: getCoreRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
+        getPaginationRowModel: manualPagination ? undefined : getPaginationRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
+        manualPagination,
+        pageCount,
         onSortingChange: (updater) => {
             const next = updater as SortingState
             setSorting(next)
@@ -113,17 +125,30 @@ export function DataTable<TData, TValue>({
             setGlobalFilter(next)
             onStateChange?.onGlobalFilterChange?.(next)
         },
+        onPaginationChange: (updater) => {
+            const next = typeof updater === 'function' ? updater(pagination) : updater
+            setPagination(next)
+            onStateChange?.onPaginationChange?.(updater)
+        },
         state: {
             sorting,
             columnFilters,
             columnVisibility,
             rowSelection,
             globalFilter,
+            pagination,
         },
         initialState: {
-            pagination: { pageSize },
+            pagination: { pageIndex: 0, pageSize },
         },
     })
+
+    // Sync pagination state from props
+    React.useEffect(() => {
+        if (state?.pagination) {
+            setPagination(state.pagination)
+        }
+    }, [state?.pagination])
 
     React.useEffect(() => {
         onTableReady?.(table as unknown as TanTable<TData>)
@@ -266,7 +291,7 @@ export function DataTable<TData, TValue>({
                             </div>
                             <div className="flex items-center gap-3">
                                 <span>
-                                    Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+                                    Page {table.getState().pagination.pageIndex + 1} of {pageCount ?? table.getPageCount()}
                                 </span>
                                 <div className="flex items-center gap-2">
                                     <Button variant="outline" size="icon" className="hidden size-8 lg:flex" onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}>
@@ -287,7 +312,7 @@ export function DataTable<TData, TValue>({
                                     </Button>
                                 </div>
                             </div>
-                            <div>{table.getFilteredRowModel().rows.length} results</div>
+                            <div>{manualPagination ? data.length : table.getFilteredRowModel().rows.length} results</div>
                         </div>
                     )}
                 </div>
