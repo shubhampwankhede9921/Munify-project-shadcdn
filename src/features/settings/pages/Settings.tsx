@@ -31,6 +31,78 @@ interface UserProfile {
   mobileNumber?: string
 }
 
+// Full user payload interface matching API response
+interface FullUserPayload {
+  id: number
+  version: number
+  login: string
+  password: string | null
+  userName: string
+  changePasswordOnLogin: boolean
+  firstName: string | null
+  lastName: string | null
+  email: string
+  langKey: string
+  roleCode: string
+  activated: boolean
+  roles: any[] | null
+  branchSetCode: string | null
+  bankName: string
+  branchName: string
+  agentAmtLimit: number | null
+  imeiNumber: string
+  branchId: number
+  branchCode: string | null
+  userState: string
+  activeBranch: string
+  activeBranchId: number
+  userType: string
+  mobileNumber: number | string
+  landlineNumber: string | null
+  validUntil: string
+  lastPasswordUpdatedOn: string
+  accessType: string
+  customerId: string | null
+  villageName: string | null
+  editCheckerAccess: boolean
+  agentAllVillageAccess: boolean
+  urnNo: string | null
+  agentId: number | null
+  employeeId: number | null
+  mobileNumber2: number
+  userRoles: Array<{
+    id: number
+    version: number
+    userId: string
+    roleId: number
+    teamCode: string | null
+  }>
+  userBranches: Array<{
+    id: number
+    version: number
+    userId: string
+    branchId: number
+    bankId: number
+    titleExpr: string
+  }>
+  partnerCode: string | null
+  otp: string | null
+  otpPurpose: string | null
+  allowedDevices: any[]
+  userAccountLockStatus: string | null
+  accountLockedAt: string | null
+  accountLockReason: string | null
+  imeiOverrideRequired: boolean
+  mfaToken: string | null
+  mfaTokenExpired: string | null
+  mfaRequired: boolean
+  photoImageId: string | null
+  externalSystemCode: string | null
+  apiUser: boolean
+  hsmUserId: string | null
+  [key: string]: any // Allow additional fields
+}
+
 interface GenerateOtpRequest {
   userId: string
 }
@@ -48,6 +120,7 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState<"profile" | "password">("profile")
   const [isEditing, setIsEditing] = useState(false)
   const [otpRequestedFor, setOtpRequestedFor] = useState<string>("")
+  const [fullUserPayload, setFullUserPayload] = useState<FullUserPayload | null>(null)
 
   // Fetch profile from FastAPI using userId from the route
   const {
@@ -60,10 +133,15 @@ export default function Settings() {
     queryFn: async () => {
       const response = await apiService.get(`/users/perdix/${routeUserId}`)
       const payload: any = response?.data?.data ?? response?.data ?? response
+      
+      // Store the full payload for update
+      setFullUserPayload(payload as FullUserPayload)
+      
+      // Map to simplified profile for form
       const mapped: UserProfile = {
         id: payload?.id ?? payload?.user_id,
         fullName: payload?.userName,
-        userId: payload?.userId ?? payload?.username ?? payload?.user_id ?? routeUserId ?? "",
+        userId: payload?.userId ?? payload?.username ?? payload?.login ?? payload?.user_id ?? routeUserId ?? "",
         email: payload?.email ?? "",
         mobileNumber: payload?.mobileNumber ?? payload?.mobile_number ?? payload?.phone ?? "",
       }
@@ -160,20 +238,47 @@ export default function Settings() {
 
   // Update profile mutation
   const updateProfileMutation = useMutation({
-    mutationFn: async (data: UserProfile) => {
-      // Assuming update endpoint accepts userId in path in the same resource
-      // Adjust if your API differs
-      return await apiService.put<UserProfile>(`/users/perdix/${data.userId}`, data)
+    mutationFn: async (formData: UserProfile) => {
+      if (!fullUserPayload) {
+        throw new Error("Full user payload not available")
+      }
+      
+      // Merge changed fields into the full payload
+      // Convert mobileNumber to number if it's a string
+      let mobileNumberValue: number | string = fullUserPayload.mobileNumber
+      if (formData.mobileNumber) {
+        if (typeof formData.mobileNumber === "string") {
+          const parsed = parseInt(formData.mobileNumber, 10)
+          mobileNumberValue = isNaN(parsed) ? fullUserPayload.mobileNumber : parsed
+        } else {
+          mobileNumberValue = formData.mobileNumber
+        }
+      }
+      
+      const updatedPayload: FullUserPayload = {
+        ...fullUserPayload,
+        userName: formData.fullName || fullUserPayload.userName,
+        email: formData.email || fullUserPayload.email,
+        mobileNumber: mobileNumberValue,
+      }
+      
+      // Update endpoint is /users/perdix (without userId in path)
+      return await apiService.put<FullUserPayload>("/users/perdix", updatedPayload)
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["user-profile", routeUserId] })
-      // Update form with returned data
-      setProfileForm({
-        fullName: data?.fullName || "",
-        userId: data?.userId || routeUserId || "",
-        email: data?.email || "",
-        mobileNumber: data?.mobileNumber || "",
-      })
+      // Update full payload with returned data
+      if (data) {
+        setFullUserPayload(data as FullUserPayload)
+        // Update form with returned data
+        const payload = data as any
+        setProfileForm({
+          fullName: payload?.userName || "",
+          userId: (payload?.userId ?? payload?.login ?? payload?.username ?? routeUserId) || "",
+          email: payload?.email || "",
+          mobileNumber: payload?.mobileNumber?.toString() || "",
+        })
+      }
       alerts.success("Profile Updated", "Your profile has been updated successfully")
       setIsEditing(false)
     },
@@ -327,11 +432,11 @@ export default function Settings() {
                         })
                       }
                       setProfileErrors({})
-                    }}>
+                    }} disabled={updateProfileMutation.isPending}>
                       <X className="h-4 w-4 mr-2" />
                       Cancel
                     </Button>
-                    <Button onClick={handleProfileSubmit} disabled={updateProfileMutation.isPending}>
+                    <Button onClick={handleProfileSubmit} disabled={updateProfileMutation.isPending || !fullUserPayload}>
                       {updateProfileMutation.isPending ? (
                         <span className="inline-flex items-center gap-2">
                           <Spinner size={14} /> Saving...
