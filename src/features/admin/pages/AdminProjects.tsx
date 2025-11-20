@@ -1,12 +1,14 @@
 import { useNavigate } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { DataTable, type ColumnDef } from "@/components/data-table/data-table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
-  Search, 
   Filter, 
   Plus,
   Edit,
@@ -16,74 +18,305 @@ import {
   Users,
   AlertCircle,
   CheckCircle,
-  IndianRupee
+  IndianRupee,
+  Search
 } from "lucide-react"
+import apiService from "@/services/api"
 
-const mockAdminProjects = [
-  {
-    id: 1,
-    name: "Smart Water Management System",
-    municipality: "Mumbai Municipal Corporation",
-    state: "Maharashtra",
-    category: "Infrastructure",
-    status: "Live",
-    fundRequired: 50000000,
-    currentFunding: 35000000,
-    progress: 70,
-    investors: 15,
-    createdDate: "2024-01-15",
-    deadline: "2024-06-15",
-    priority: "High"
-  },
-  {
-    id: 2,
-    name: "Solar Street Lighting Project",
-    municipality: "Delhi Municipal Corporation",
-    state: "Delhi",
-    category: "Renewable Energy",
-    status: "Live",
-    fundRequired: 25000000,
-    currentFunding: 18000000,
-    progress: 72,
-    investors: 8,
-    createdDate: "2024-02-01",
-    deadline: "2024-05-01",
-    priority: "Medium"
-  },
-  {
-    id: 3,
-    name: "Waste Management Modernization",
-    municipality: "Bangalore City Corporation",
-    state: "Karnataka",
-    category: "Environment",
-    status: "Under Review",
-    fundRequired: 75000000,
-    currentFunding: 0,
-    progress: 0,
-    investors: 0,
-    createdDate: "2024-02-10",
-    deadline: "2024-08-10",
-    priority: "High"
-  },
-  {
-    id: 4,
-    name: "Digital Governance Platform",
-    municipality: "Chennai Corporation",
-    state: "Tamil Nadu",
-    category: "Technology",
-    status: "Completed",
-    fundRequired: 30000000,
-    currentFunding: 30000000,
-    progress: 100,
-    investors: 12,
-    createdDate: "2023-11-01",
-    deadline: "2024-02-01",
-    priority: "Low"
-  }
-]
+// Project interface based on API response
+interface AdminProject {
+  id: number
+  title?: string
+  name?: string
+  project_title?: string
+  municipality?: string
+  municipality_id?: string
+  organization_id?: string
+  state?: string
+  location?: string
+  category?: string
+  project_category?: string
+  status: string
+  fundRequired?: number
+  funding_requirement?: number
+  currentFunding?: number
+  funds_secured?: number
+  progress?: number
+  investors?: number
+  createdDate?: string
+  created_at?: string
+  deadline?: string
+  end_date?: string
+  priority?: string
+}
+
+// API response might be an array or an object with data property
+type ProjectsApiResponse = AdminProject[] | { data: AdminProject[] } | { results: AdminProject[] }
 
 export default function AdminProjects() {
   const navigate = useNavigate()
+
+  // Query for projects
+  const { data: apiResponse, isLoading, error, isError } = useQuery<ProjectsApiResponse>({
+    queryKey: ['projects'],
+    queryFn: () => apiService.get<ProjectsApiResponse>('/projects/'),
+  })
+
+  // Safely extract projects array from API response
+  const projects: AdminProject[] = useMemo(() => {
+    if (!apiResponse) return []
+    if (Array.isArray(apiResponse)) return apiResponse
+    if ('data' in apiResponse && Array.isArray(apiResponse.data)) return apiResponse.data
+    if ('results' in apiResponse && Array.isArray(apiResponse.results)) return apiResponse.results
+    return []
+  }, [apiResponse])
+
+  // Calculate stats from fetched data
+  const stats = useMemo(() => {
+    if (!Array.isArray(projects)) {
+      return {
+        totalProjects: 0,
+        liveProjects: 0,
+        totalFunding: 0,
+        activeInvestors: 0
+      }
+    }
+    
+    return {
+      totalProjects: projects.length,
+      liveProjects: projects.filter(p => 
+        p.status?.toLowerCase() === 'live' || 
+        p.status?.toLowerCase() === 'active' ||
+        p.status?.toLowerCase() === 'published'
+      ).length,
+      totalFunding: projects.reduce((sum, p) => {
+        const funding = p.currentFunding || p.funds_secured || 0
+        return sum + funding
+      }, 0),
+      activeInvestors: projects.reduce((sum, p) => sum + (p.investors || 0), 0)
+    }
+  }, [projects])
+
+  // Helper function to get project name
+  const getProjectName = (project: AdminProject) => {
+    return project.title || project.name || project.project_title || 'Untitled Project'
+  }
+
+  // Helper function to get municipality
+  const getMunicipality = (project: AdminProject) => {
+    return project.municipality || project.municipality_id || project.organization_id || 'N/A'
+  }
+
+  // Helper function to get state
+  const getState = (project: AdminProject) => {
+    return project.state || project.location || 'N/A'
+  }
+
+  // Helper function to get category
+  const getCategory = (project: AdminProject) => {
+    return project.category || project.project_category || 'Uncategorized'
+  }
+
+  // Helper function to get funding required
+  const getFundRequired = (project: AdminProject) => {
+    return project.fundRequired || project.funding_requirement || 0
+  }
+
+  // Helper function to get current funding
+  const getCurrentFunding = (project: AdminProject) => {
+    return project.currentFunding || project.funds_secured || 0
+  }
+
+  // Helper function to calculate progress
+  const getProgress = (project: AdminProject) => {
+    if (project.progress !== undefined) return project.progress
+    const fundRequired = getFundRequired(project)
+    const currentFunding = getCurrentFunding(project)
+    if (fundRequired > 0) {
+      return Math.min(100, Math.round((currentFunding / fundRequired) * 100))
+    }
+    return 0
+  }
+
+  // Helper function to format currency
+  const formatCurrency = (amount: number) => {
+    if (amount >= 10000000) {
+      return `₹${(amount / 10000000).toFixed(1)}Cr`
+    } else if (amount >= 100000) {
+      return `₹${(amount / 100000).toFixed(1)}L`
+    }
+    return `₹${amount.toLocaleString()}`
+  }
+
+  // Helper function to get status badge variant
+  const getStatusBadgeVariant = (status: string) => {
+    const statusLower = status?.toLowerCase() || ''
+    if (statusLower === 'live' || statusLower === 'active' || statusLower === 'published') {
+      return 'default'
+    }
+    if (statusLower === 'under review' || statusLower === 'pending' || statusLower === 'pending_validation') {
+      return 'secondary'
+    }
+    if (statusLower === 'completed' || statusLower === 'finished') {
+      return 'outline'
+    }
+    return 'destructive'
+  }
+
+  // Helper function to get priority badge variant
+  const getPriorityBadgeVariant = (priority?: string) => {
+    if (!priority) return 'outline'
+    const priorityLower = priority.toLowerCase()
+    if (priorityLower === 'high') return 'destructive'
+    if (priorityLower === 'medium') return 'secondary'
+    return 'outline'
+  }
+
+  // Define columns for DataTable
+  const columns: ColumnDef<AdminProject, any>[] = [
+    {
+      accessorKey: 'title',
+      header: 'Project',
+      cell: ({ row }) => {
+        const project = row.original
+        return (
+          <div>
+            <div className="font-medium">{getProjectName(project)}</div>
+            <div className="text-sm text-muted-foreground">{getCategory(project)}</div>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'municipality',
+      header: 'Municipality',
+      cell: ({ row }) => {
+        const project = row.original
+        return (
+          <div>
+            <div className="font-medium">{getMunicipality(project)}</div>
+            <div className="text-sm text-muted-foreground">{getState(project)}</div>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      cell: ({ row }) => {
+        const project = row.original
+        const status = project.status || 'Unknown'
+        return (
+          <Badge variant={getStatusBadgeVariant(status)}>
+            {status === 'Live' || status?.toLowerCase() === 'active' || status?.toLowerCase() === 'published' ? (
+              <AlertCircle className="h-3 w-3 mr-1" />
+            ) : status === 'Completed' || status?.toLowerCase() === 'finished' ? (
+              <CheckCircle className="h-3 w-3 mr-1" />
+            ) : null}
+            {status}
+          </Badge>
+        )
+      },
+    },
+    {
+      accessorKey: 'funding',
+      header: 'Funding',
+      cell: ({ row }) => {
+        const project = row.original
+        const fundRequired = getFundRequired(project)
+        const currentFunding = getCurrentFunding(project)
+        return (
+          <div>
+            <div className="font-medium">{formatCurrency(currentFunding)}</div>
+            <div className="text-sm text-muted-foreground">
+              of {formatCurrency(fundRequired)}
+            </div>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'progress',
+      header: 'Progress',
+      cell: ({ row }) => {
+        const project = row.original
+        const progress = getProgress(project)
+        return (
+          <div className="flex items-center space-x-2">
+            <div className="w-16 bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full" 
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <span className="text-sm">{progress}%</span>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'investors',
+      header: 'Investors',
+      cell: ({ row }) => {
+        const project = row.original
+        return (
+          <div className="flex items-center space-x-1">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            <span>{project.investors || 0}</span>
+          </div>
+        )
+      },
+    },
+    {
+      accessorKey: 'priority',
+      header: 'Priority',
+      cell: ({ row }) => {
+        const project = row.original
+        const priority = project.priority || 'Low'
+        return (
+          <Badge variant={getPriorityBadgeVariant(priority)}>
+            {priority}
+          </Badge>
+        )
+      },
+    },
+    {
+      id: 'actions',
+      header: 'Actions',
+      enableHiding: false,
+      cell: ({ row }) => {
+        const project = row.original
+        const isDraft = project.status?.toLowerCase() === 'draft'
+        return (
+          <div className="flex items-center space-x-2">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => navigate(`/main/admin/projects/${project.id}`)}
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              disabled={!isDraft}
+              onClick={() => {
+                if (isDraft) {
+                  navigate(`/main/admin/projects/${project.id}/edit`)
+                }
+              }}
+              className={!isDraft ? "opacity-50 cursor-not-allowed" : ""}
+            >
+              <Edit className={`h-4 w-4 ${!isDraft ? "text-gray-400" : ""}`} />
+            </Button>
+            <Button variant="ghost" size="sm">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
     <div className="space-y-6">
@@ -114,7 +347,7 @@ export default function AdminProjects() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Projects</p>
-                <p className="text-2xl font-bold">{mockAdminProjects.length}</p>
+                <p className="text-2xl font-bold">{stats.totalProjects}</p>
               </div>
               <TrendingUp className="h-8 w-8 text-blue-600" />
             </div>
@@ -125,7 +358,7 @@ export default function AdminProjects() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Live Projects</p>
-                <p className="text-2xl font-bold">2</p>
+                <p className="text-2xl font-bold">{stats.liveProjects}</p>
               </div>
               <AlertCircle className="h-8 w-8 text-orange-600" />
             </div>
@@ -136,7 +369,7 @@ export default function AdminProjects() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Funding</p>
-                <p className="text-2xl font-bold">₹18Cr</p>
+                <p className="text-2xl font-bold">{formatCurrency(stats.totalFunding)}</p>
               </div>
               <IndianRupee className="h-8 w-8 text-green-600" />
             </div>
@@ -147,7 +380,7 @@ export default function AdminProjects() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Active Investors</p>
-                <p className="text-2xl font-bold">35</p>
+                <p className="text-2xl font-bold">{stats.activeInvestors}</p>
               </div>
               <Users className="h-8 w-8 text-purple-600" />
             </div>
@@ -196,110 +429,54 @@ export default function AdminProjects() {
         </CardContent>
       </Card>
 
-      {/* Projects Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Projects</CardTitle>
-          <CardDescription>
-            Manage and monitor project status, funding, and performance
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Project</TableHead>
-                <TableHead>Municipality</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Funding</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Investors</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockAdminProjects.map((project) => (
-                <TableRow key={project.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{project.name}</div>
-                      <div className="text-sm text-muted-foreground">{project.category}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{project.municipality}</div>
-                      <div className="text-sm text-muted-foreground">{project.state}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        project.status === "Live" ? "default" :
-                        project.status === "Under Review" ? "secondary" :
-                        project.status === "Completed" ? "outline" : "destructive"
-                      }
-                    >
-                      {project.status === "Live" && <AlertCircle className="h-3 w-3 mr-1" />}
-                      {project.status === "Completed" && <CheckCircle className="h-3 w-3 mr-1" />}
-                      {project.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">₹{(project.currentFunding / 10000000).toFixed(1)}Cr</div>
-                      <div className="text-sm text-muted-foreground">
-                        of ₹{(project.fundRequired / 10000000).toFixed(1)}Cr
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-16 bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full" 
-                          style={{ width: `${project.progress}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-sm">{project.progress}%</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-1">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{project.investors}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant={
-                        project.priority === "High" ? "destructive" :
-                        project.priority === "Medium" ? "secondary" : "outline"
-                      }
-                    >
-                      {project.priority}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Error State */}
+      {isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error?.message || 'Failed to fetch projects. Please try again.'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Projects DataTable */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-8">
+          <div className="text-muted-foreground">Loading projects...</div>
+        </div>
+      ) : projects.length === 0 ? (
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center">
+              <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground" />
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">No projects</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Get started by creating a new project.
+              </p>
+              <Button 
+                className="mt-4"
+                onClick={() => navigate("/main/admin/projects/add")}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Project
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <DataTable<AdminProject, any>
+          title="All Projects"
+          description="Manage and monitor project status, funding, and performance"
+          columns={columns}
+          data={projects}
+         
+          showToolbar={true}
+          showFooter={true}
+          enableExport={true}
+          exportFilename="projects.csv"
+          globalFilterPlaceholder="Search projects, municipalities..."
+        />
+      )}
 
       {/* Recent Activity */}
       <Card>
