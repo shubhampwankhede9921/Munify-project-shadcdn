@@ -85,6 +85,7 @@ const data = {
       items: [
         { title: "Project Management", url: "/main/admin/projects" },
         { title: "Create Project", url: "/main/admin/projects/create" },
+        { title: "My Drafts", url: "/main/admin/projects/drafts" },
         { title: "Validate Projects", url: "/main/admin/projects/validate" },
         { title: "User Management", url: "/main/admin/users" },
         { title: "Invitations Management", url: "/main/admin/invitations" },

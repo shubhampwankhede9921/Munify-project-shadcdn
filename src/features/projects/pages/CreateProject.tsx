@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { DatePicker } from '@/components/ui/date-picker'
 import { alerts } from '@/lib/alerts'
 import apiService from '@/services/api'
 
@@ -72,6 +73,10 @@ interface FormData {
   totalProjectCost: string
   fundingRequirement: string
   alreadySecuredFunds: string
+  fundraisingStartDate: string
+  fundraisingEndDate: string
+  municipalityCreditRating: string
+  municipalityCreditScore: string
   
   // Location
   state: string
@@ -92,9 +97,23 @@ interface FormData {
 
 export default function CreateProject() {
   const navigate = useNavigate()
+  const { draftId } = useParams<{ draftId?: string }>()
   const queryClient = useQueryClient()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('identification')
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId || null)
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false)
+
+  // Reset draft loaded flag when draftId changes
+  useEffect(() => {
+    if (draftId) {
+      setIsDraftLoaded(false)
+      setCurrentDraftId(draftId)
+    } else {
+      setIsDraftLoaded(false)
+      setCurrentDraftId(null)
+    }
+  }, [draftId])
   
   // Generate a mock reference ID (in real app, this would come from backend)
   const projectReferenceId = useMemo(() => {
@@ -119,6 +138,10 @@ export default function CreateProject() {
     totalProjectCost: '',
     fundingRequirement: '',
     alreadySecuredFunds: '0',
+    fundraisingStartDate: '',
+    fundraisingEndDate: '',
+    municipalityCreditRating: '',
+    municipalityCreditScore: '',
     state: '',
     city: '',
     ward: '',
@@ -139,6 +162,48 @@ export default function CreateProject() {
     return isFinite(gap) ? gap : 0
   }, [formData.fundingRequirement, formData.alreadySecuredFunds])
 
+  // Helper function to map form data to draft API payload
+  const mapFormDataToDraftPayload = (): any => {
+    // Convert project stage to lowercase for API
+    const projectStage = formData.stage ? formData.stage.toLowerCase().replace(' ', '_') as 'planning' | 'initiated' | 'in_progress' : 'planning'
+    
+    // Format dates for API
+    const startDate = formData.startDate || ''
+    const endDate = formData.endDate || ''
+    
+    // Format fundraising dates from user input
+    const fundraisingStartDate = formData.fundraisingStartDate ? `${formData.fundraisingStartDate}T00:00:00` : undefined
+    const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59` : undefined
+
+    return {
+      title: formData.projectTitle || 'Untitled Project',
+      organization_type: 'municipality',
+      organization_id: formData.municipalityId || formData.municipalityCode || '',
+      department: formData.department || '',
+      contact_person: formData.contactPersonName || '',
+      contact_person_designation: formData.contactPersonDesignation || undefined,
+      contact_person_email: formData.contactPersonEmail || undefined,
+      contact_person_phone: formData.contactPersonPhone || undefined,
+      category: formData.category || '',
+      project_stage: projectStage,
+      description: formData.description || '',
+      start_date: startDate || undefined,
+      end_date: endDate || undefined,
+      total_project_cost: formData.totalProjectCost ? parseFloat(formData.totalProjectCost) : undefined,
+      funding_requirement: formData.fundingRequirement ? parseFloat(formData.fundingRequirement) : undefined,
+      already_secured_funds: formData.alreadySecuredFunds ? parseFloat(formData.alreadySecuredFunds) : undefined,
+      currency: 'INR',
+      fundraising_start_date: fundraisingStartDate,
+      fundraising_end_date: fundraisingEndDate,
+      municipality_credit_rating: formData.municipalityCreditRating || undefined,
+      municipality_credit_score: formData.municipalityCreditScore ? parseFloat(formData.municipalityCreditScore) : undefined,
+      // Location fields
+      state: formData.state || undefined,
+      city: formData.city || undefined,
+      ward: formData.ward || undefined,
+    }
+  }
+
   // Helper function to map form data to API payload
   const mapFormDataToApiPayload = (status: 'draft' | 'pending_validation'): any => {
     // Convert project stage to lowercase for API
@@ -148,12 +213,12 @@ export default function CreateProject() {
     const startDate = formData.startDate || ''
     const endDate = formData.endDate || ''
     
-    // Format fundraising dates (using project dates for now, can be adjusted later)
-    const fundraisingStartDate = startDate ? `${startDate}T00:00:00Z` : undefined
-    const fundraisingEndDate = endDate ? `${endDate}T23:59:59Z` : undefined
+    // Format fundraising dates from user input
+    const fundraisingStartDate = formData.fundraisingStartDate ? `${formData.fundraisingStartDate}T00:00:00Z` : undefined
+    const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59Z` : undefined
 
     // Get current user email (fallback to contact person email for MVP)
-    const createdBy = formData.contactPersonEmail || 'admin@example.com'
+    const createdBy = 'dev@example.com'
 
     return {
       organization_type: 'municipality',
@@ -169,11 +234,10 @@ export default function CreateProject() {
       total_project_cost: formData.totalProjectCost || '0.00',
       funding_requirement: formData.fundingRequirement || '0.00',
       already_secured_funds: formData.alreadySecuredFunds || '0.00',
-      currency: 'INR',
       fundraising_start_date: fundraisingStartDate,
       fundraising_end_date: fundraisingEndDate,
-      municipality_credit_rating: 'AA', // Default value, can be made configurable later
-      municipality_credit_score: '85.50', // Default value, can be made configurable later
+      municipality_credit_rating: formData.municipalityCreditRating || '',
+      municipality_credit_score: formData.municipalityCreditScore || '',
       status: status,
       visibility: 'private', // Default to private for MVP
       approved_by: null, // Will be set by backend on approval
@@ -182,13 +246,114 @@ export default function CreateProject() {
     }
   }
 
-  // Mutation for creating project (only called on Submit for Validation)
+  // Query to load draft data if draftId exists
+  const { data: draftData, isLoading: isLoadingDraft, isError: isDraftError } = useQuery({
+    queryKey: ['project-draft', draftId],
+    queryFn: async () => {
+      const response = await apiService.get(`/project-drafts/${draftId}`)
+      // Handle different response structures
+      return response?.data || response
+    },
+    enabled: !!draftId,
+  })
+
+  // Load draft data into form when draft is loaded
+  useEffect(() => {
+    if (draftData && draftId && !isDraftLoaded) {
+      // Handle different response structures - could be wrapped in 'data' property
+      const draft = (draftData as any)?.data || draftData
+      
+      if (draft && draft.id) {
+        // Debug: Uncomment to see draft data being loaded
+        // console.log('Loading draft data:', draft)
+        setFormData(prev => ({
+          ...prev,
+          projectTitle: draft.title ?? prev.projectTitle,
+          municipalityId: draft.organization_id ?? prev.municipalityId,
+          municipalityCode: draft.organization_id ?? prev.municipalityCode,
+          department: draft.department ?? prev.department,
+          contactPersonName: draft.contact_person ?? prev.contactPersonName,
+          contactPersonDesignation: draft.contact_person_designation ?? prev.contactPersonDesignation,
+          contactPersonEmail: draft.contact_person_email ?? prev.contactPersonEmail,
+          contactPersonPhone: draft.contact_person_phone ?? prev.contactPersonPhone,
+          category: draft.category ?? prev.category,
+          stage: draft.project_stage 
+            ? (draft.project_stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) as ProjectStage)
+            : prev.stage,
+          description: draft.description ?? prev.description,
+          startDate: draft.start_date ? draft.start_date.split('T')[0] : prev.startDate,
+          endDate: draft.end_date ? draft.end_date.split('T')[0] : prev.endDate,
+          totalProjectCost: draft.total_project_cost != null ? String(draft.total_project_cost) : prev.totalProjectCost,
+          fundingRequirement: draft.funding_requirement != null ? String(draft.funding_requirement) : prev.fundingRequirement,
+          alreadySecuredFunds: draft.already_secured_funds != null ? String(draft.already_secured_funds) : prev.alreadySecuredFunds,
+          fundraisingStartDate: draft.fundraising_start_date ? draft.fundraising_start_date.split('T')[0] : prev.fundraisingStartDate,
+          fundraisingEndDate: draft.fundraising_end_date ? draft.fundraising_end_date.split('T')[0] : prev.fundraisingEndDate,
+          municipalityCreditRating: draft.municipality_credit_rating ?? prev.municipalityCreditRating,
+          municipalityCreditScore: draft.municipality_credit_score != null ? String(draft.municipality_credit_score) : prev.municipalityCreditScore,
+          // Location fields if available in draft
+          state: draft.state ?? prev.state,
+          city: draft.city ?? prev.city,
+          ward: draft.ward ?? prev.ward,
+          
+        }))
+        setCurrentDraftId(String(draft.id))
+        setIsDraftLoaded(true)
+      }
+    }
+  }, [draftData, draftId, isDraftLoaded])
+
+  // Mutation for saving draft
+  const saveDraftMutation = useMutation({
+    mutationFn: (payload: any) => {
+      if (currentDraftId) {
+        // Update existing draft
+        return apiService.put(`/project-drafts/${currentDraftId}`, payload)
+      } else {
+        // Create new draft
+        return apiService.post('/project-drafts/', payload)
+      }
+    },
+    onSuccess: (data) => {
+      // Handle different response structures - could be wrapped in 'data' property
+      const response = (data as any)?.data || data
+      const draftId = response?.id || currentDraftId
+      
+      if (draftId && !currentDraftId) {
+        setCurrentDraftId(String(draftId))
+        // Update URL without navigation
+        window.history.replaceState({}, '', `/main/admin/projects/create/${draftId}`)
+      }
+      queryClient.invalidateQueries({ queryKey: ['project-drafts'] })
+      alerts.success('Draft Saved', 'Your project draft has been saved successfully.')
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to save draft. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Mutation for submitting draft (converts draft to project)
+  const submitDraftMutation = useMutation({
+    mutationFn: (draftId: string) => apiService.post(`/project-drafts/${draftId}/submit`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['project-drafts'] })
+      alerts.success('Project Submitted', 'Your project has been submitted for validation. It will be reviewed by an admin.')
+      navigate('/main/admin/projects/drafts')
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to submit project. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Mutation for creating project (only called on Submit for Validation when not a draft)
   const createProjectMutation = useMutation({
     mutationFn: (payload: any) => apiService.post('/projects/', payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       alerts.success('Project Submitted', 'Your project has been submitted for validation. It will be reviewed by an admin.')
-      navigate('/main/admin/projects')
+      navigate('/main/admin/projects/drafts')
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to submit project. Please try again.'
@@ -357,6 +522,17 @@ export default function CreateProject() {
       newErrors.alreadySecuredFunds = 'Secured funds cannot exceed funding requirement'
     }
 
+    // Fundraising Dates
+    if (!formData.fundraisingStartDate) {
+      newErrors.fundraisingStartDate = 'Fundraising start date is required'
+    }
+    if (!formData.fundraisingEndDate) {
+      newErrors.fundraisingEndDate = 'Fundraising end date is required'
+    }
+    if (formData.fundraisingStartDate && formData.fundraisingEndDate && new Date(formData.fundraisingStartDate) >= new Date(formData.fundraisingEndDate)) {
+      newErrors.fundraisingEndDate = 'Fundraising end date must be after start date'
+    }
+
     // Location
     if (!formData.state.trim()) {
       newErrors.state = 'State is required'
@@ -399,6 +575,8 @@ export default function CreateProject() {
         return !!(
           formData.totalProjectCost &&
           formData.fundingRequirement &&
+          formData.fundraisingStartDate &&
+          formData.fundraisingEndDate &&
           formData.state.trim() &&
           formData.city.trim() &&
           formData.ward.trim()
@@ -415,18 +593,23 @@ export default function CreateProject() {
   }
 
   const handleSaveDraft = () => {
-    // For MVP: Just show a message that data is saved locally in form state
-    // No API call - data persists in component state until form is submitted
-    alerts.success('Draft Saved', 'Your changes are saved locally. Click "Submit for Validation" when ready to submit.')
+    const payload = mapFormDataToDraftPayload()
+    saveDraftMutation.mutate(payload)
   }
+
+  // Tab navigation
+  const tabs = ['identification', 'overview', 'financial', 'documentation', 'media']
+  
+  // Check if all tabs are complete
+  const allTabsComplete = useMemo(() => {
+    return tabs.every(tab => isTabComplete(tab))
+  }, [formData])
 
   // Handle tab change - just switch tabs, no API call
   const handleTabChange = (value: string) => {
     setActiveTab(value)
   }
 
-  // Tab navigation
-  const tabs = ['identification', 'overview', 'financial', 'documentation', 'media']
   const currentTabIndex = tabs.indexOf(activeTab)
   const canGoNext = currentTabIndex < tabs.length - 1
   const canGoPrevious = currentTabIndex > 0
@@ -451,9 +634,40 @@ export default function CreateProject() {
       return
     }
 
-    // Only API call happens here - on Submit for Validation button click
-    const payload = mapFormDataToApiPayload('pending_validation')
-    createProjectMutation.mutate(payload)
+    // If we have a draft ID, submit the draft (which will create the project from draft data)
+    if (currentDraftId) {
+      submitDraftMutation.mutate(currentDraftId)
+    } else {
+      // If no draft exists, create project directly using the project creation API
+      const payload = mapFormDataToApiPayload('pending_validation')
+      createProjectMutation.mutate(payload)
+    }
+  }
+
+  // Show loading state while draft is being loaded
+  if (isLoadingDraft && draftId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Loading draft...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state if draft failed to load
+  if (isDraftError && draftId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-destructive mb-4">Failed to load draft. Please try again.</p>
+          <Button onClick={() => navigate('/main/admin/projects/drafts')}>
+            Back to Drafts
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -464,7 +678,7 @@ export default function CreateProject() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/main/admin/projects')}
+            onClick={() => navigate('/main/admin/projects/drafts')}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             
@@ -758,29 +972,28 @@ export default function CreateProject() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="startDate">Start Date *</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => handleChange('startDate', e.target.value)}
-                  className={errors.startDate ? 'border-red-500' : ''}
+                <DatePicker
+                  value={formData.startDate ? new Date(formData.startDate) : undefined}
+                  onChange={(d) => {
+                    const yyyyMmDd = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ""
+                    handleChange('startDate', yyyyMmDd)
+                  }}
                 />
                 {errors.startDate && (
                   <p className="text-sm text-red-500">{errors.startDate}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 flex flex-col">
                 <Label htmlFor="endDate">End Date *</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => handleChange('endDate', e.target.value)}
-                  min={formData.startDate || undefined}
-                  className={errors.endDate ? 'border-red-500' : ''}
+                <DatePicker
+                  value={formData.endDate ? new Date(formData.endDate) : undefined}
+                  onChange={(d) => {
+                    const yyyyMmDd = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ""
+                    handleChange('endDate', yyyyMmDd)
+                  }}
                 />
                 {errors.endDate && (
                   <p className="text-sm text-red-500">{errors.endDate}</p>
@@ -886,6 +1099,82 @@ export default function CreateProject() {
                 </Badge>
                 <p className="text-sm text-muted-foreground">
                   = Funding Requirement - Already Secured Funds
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-2 flex flex-col">
+                <Label htmlFor="fundraisingStartDate">Fundraising Start Date *</Label>
+                <DatePicker
+                  value={formData.fundraisingStartDate ? new Date(formData.fundraisingStartDate) : undefined}
+                  onChange={(d) => {
+                    const yyyyMmDd = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ""
+                    handleChange('fundraisingStartDate', yyyyMmDd)
+                  }}
+                />
+                {errors.fundraisingStartDate && (
+                  <p className="text-sm text-red-500">{errors.fundraisingStartDate}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  When fundraising will begin
+                </p>
+              </div>
+
+              <div className="space-y-2 flex flex-col">
+                <Label htmlFor="fundraisingEndDate">Fundraising End Date *</Label>
+                <DatePicker
+                  value={formData.fundraisingEndDate ? new Date(formData.fundraisingEndDate) : undefined}
+                  onChange={(d) => {
+                    const yyyyMmDd = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) : ""
+                    handleChange('fundraisingEndDate', yyyyMmDd)
+                  }}
+                />
+                {errors.fundraisingEndDate && (
+                  <p className="text-sm text-red-500">{errors.fundraisingEndDate}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  When fundraising will end
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="municipalityCreditRating">Municipality Credit Rating</Label>
+                <Input
+                  id="municipalityCreditRating"
+                  value={formData.municipalityCreditRating}
+                  onChange={(e) => handleChange('municipalityCreditRating', e.target.value)}
+                  placeholder="e.g., AA, A, BBB"
+                  className={errors.municipalityCreditRating ? 'border-red-500' : ''}
+                />
+                {errors.municipalityCreditRating && (
+                  <p className="text-sm text-red-500">{errors.municipalityCreditRating}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Credit rating of the municipality (e.g., AA, A, BBB)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="municipalityCreditScore">Municipality Credit Score</Label>
+                <Input
+                  id="municipalityCreditScore"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.municipalityCreditScore}
+                  onChange={(e) => handleChange('municipalityCreditScore', e.target.value)}
+                  placeholder="e.g., 85.50"
+                  className={errors.municipalityCreditScore ? 'border-red-500' : ''}
+                />
+                {errors.municipalityCreditScore && (
+                  <p className="text-sm text-red-500">{errors.municipalityCreditScore}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Credit score of the municipality (0-100)
                 </p>
               </div>
             </div>
@@ -1346,8 +1635,8 @@ export default function CreateProject() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/main/admin/projects')}
-            disabled={createProjectMutation.isPending}
+            onClick={() => navigate('/main/admin/projects/drafts')}
+            disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
           >
             Cancel
           </Button>
@@ -1355,18 +1644,20 @@ export default function CreateProject() {
             type="button"
             variant="outline"
             onClick={handleSaveDraft}
-            disabled={createProjectMutation.isPending}
+            disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
           >
             <Save className="h-4 w-4 mr-2" />
-            Save as Draft
+            {saveDraftMutation.isPending ? 'Saving...' : 'Save as Draft'}
           </Button>
-          <Button
-            type="submit"
-            disabled={createProjectMutation.isPending}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {createProjectMutation.isPending ? 'Submitting...' : 'Submit for Validation'}
-          </Button>
+          {allTabsComplete && (
+            <Button
+              type="submit"
+              disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {createProjectMutation.isPending || submitDraftMutation.isPending ? 'Submitting...' : 'Submit for Validation'}
+            </Button>
+          )}
         </div>
       </form>
     </div>
