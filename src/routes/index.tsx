@@ -14,7 +14,6 @@ import {
   MunicipalRatings,
   MunicipalAnalysis,
   AdminProjects,
-  AdminProjectValidation,
   AdminProjectReview,
   AdminNotifications,
   AdminUsers,
@@ -69,7 +68,7 @@ export const router = createBrowserRouter([
       { path: "municipal/ratings", element: <MunicipalRatings /> },
       { path: "municipal/analysis", element: <MunicipalAnalysis /> },
       { path: "admin/projects", element: <AdminProjects /> },
-      { path: "admin/projects/validate", element: <AdminProjectValidation /> },
+      { path: "admin/projects/validate", element: <AdminProjects /> },
       { path: "admin/projects/validate/:id", element: <AdminProjectReview /> },
       
       { path: "admin/projects/create", element: <CreateProject /> },

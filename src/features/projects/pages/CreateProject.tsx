@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight, Check, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,29 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DatePicker } from '@/components/ui/date-picker'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { Spinner } from '@/components/ui/spinner'
 import { alerts } from '@/lib/alerts'
 import apiService from '@/services/api'
+import { cn } from '@/lib/utils'
 
-// Project Categories
-const projectCategories = [
-  'Infrastructure',
-  'Sanitation',
-  'Water Supply',
-  'Transportation',
-  'Renewable Energy',
-  'Waste Management',
-  'Urban Development',
-  'Healthcare',
-  'Education',
-  'Other'
-] as const
+// API Response Types
+interface ProjectCategory {
+  id: number
+  value: string
+}
 
-// Project Stages
-const projectStages = [
-  'Planning',
-  'Initiated',
-  'In Progress'
-] as const
+interface ProjectStage {
+  id: number
+  value: string
+}
 
 // Sample Municipalities (will be replaced with API data later)
 const municipalities = [
@@ -46,9 +40,6 @@ const municipalities = [
   { id: 'KMC', name: 'Kolkata Municipal Corporation', code: 'KMC' },
   { id: 'NDMC', name: 'New Delhi Municipal Council', code: 'NDMC' },
 ] as const
-
-type ProjectCategory = typeof projectCategories[number]
-type ProjectStage = typeof projectStages[number]
 
 interface FormData {
   // Project Identification
@@ -63,8 +54,8 @@ interface FormData {
   contactPersonPhone: string
   
   // Project Overview
-  category: ProjectCategory | ''
-  stage: ProjectStage | ''
+  category: string // Will store the category value from API
+  stage: string // Will store the stage value from API
   description: string
   startDate: string
   endDate: string
@@ -103,6 +94,46 @@ export default function CreateProject() {
   const [activeTab, setActiveTab] = useState('identification')
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId || null)
   const [isDraftLoaded, setIsDraftLoaded] = useState(false)
+  const [categoryOpen, setCategoryOpen] = useState(false)
+  const [stageOpen, setStageOpen] = useState(false)
+
+  // Query for project categories
+  const { data: categoriesResponse, isLoading: isLoadingCategories } = useQuery({
+    queryKey: ['project-categories'],
+    queryFn: () => apiService.get('/master/project-categories'),
+  })
+
+  // Query for project stages (assuming similar endpoint exists)
+  const { data: stagesResponse, isLoading: isLoadingStages } = useQuery({
+    queryKey: ['project-stages'],
+    queryFn: () => apiService.get('/master/project-stages'),
+    retry: false, // Don't retry if endpoint doesn't exist
+  })
+
+  // Extract categories and stages from API response
+  const categories: ProjectCategory[] = useMemo(() => {
+    if (!categoriesResponse) return []
+    // Handle different response structures
+    if ('data' in categoriesResponse && Array.isArray(categoriesResponse.data)) {
+      return categoriesResponse.data
+    }
+    if (Array.isArray(categoriesResponse)) {
+      return categoriesResponse
+    }
+    return []
+  }, [categoriesResponse])
+
+  const stages: ProjectStage[] = useMemo(() => {
+    if (!stagesResponse) return []
+    // Handle different response structures
+    if ('data' in stagesResponse && Array.isArray(stagesResponse.data)) {
+      return stagesResponse.data
+    }
+    if (Array.isArray(stagesResponse)) {
+      return stagesResponse
+    }
+    return []
+  }, [stagesResponse])
 
   // Reset draft loaded flag when draftId changes
   useEffect(() => {
@@ -164,8 +195,8 @@ export default function CreateProject() {
 
   // Helper function to map form data to draft API payload
   const mapFormDataToDraftPayload = (): any => {
-    // Convert project stage to lowercase for API
-    const projectStage = formData.stage ? formData.stage.toLowerCase().replace(' ', '_') as 'planning' | 'initiated' | 'in_progress' : 'planning'
+    // Convert project stage to lowercase with underscores for API
+    const projectStage = formData.stage ? formData.stage.toLowerCase().replace(/\s+/g, '_') : 'planning'
     
     // Format dates for API
     const startDate = formData.startDate || ''
@@ -206,8 +237,8 @@ export default function CreateProject() {
 
   // Helper function to map form data to API payload
   const mapFormDataToApiPayload = (status: 'draft' | 'pending_validation'): any => {
-    // Convert project stage to lowercase for API
-    const projectStage = formData.stage ? formData.stage.toLowerCase() as 'planning' | 'initiated' | 'in progress' : 'planning'
+    // Convert project stage to lowercase with underscores for API
+    const projectStage = formData.stage ? formData.stage.toLowerCase().replace(/\s+/g, '_') : 'planning'
     
     // Format dates for API
     const startDate = formData.startDate || ''
@@ -239,7 +270,7 @@ export default function CreateProject() {
       municipality_credit_rating: formData.municipalityCreditRating || '',
       municipality_credit_score: formData.municipalityCreditScore || '',
       status: status,
-      visibility: 'private', // Default to private for MVP
+      visibility: '', // Default to private for MVP
       approved_by: null, // Will be set by backend on approval
       admin_notes: '', // Empty for new projects
       created_by: createdBy,
@@ -266,7 +297,21 @@ export default function CreateProject() {
       if (draft && draft.id) {
         // Debug: Uncomment to see draft data being loaded
         // console.log('Loading draft data:', draft)
-        setFormData(prev => ({
+        
+        setFormData(prev => {
+          // Map stage value from API format to display format
+          let mappedStage = prev.stage
+          if (draft.project_stage) {
+            // Try to find matching stage from API stages array (if loaded)
+            const apiStage = stages.length > 0 ? stages.find(st => 
+              st.value.toLowerCase().replace(/\s+/g, '_') === draft.project_stage?.toLowerCase() ||
+              st.value === draft.project_stage
+            ) : null
+            // If found, use the API value format; otherwise format the draft value
+            mappedStage = apiStage?.value || draft.project_stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+          }
+          
+          return {
           ...prev,
           projectTitle: draft.title ?? prev.projectTitle,
           municipalityId: draft.organization_id ?? prev.municipalityId,
@@ -277,9 +322,7 @@ export default function CreateProject() {
           contactPersonEmail: draft.contact_person_email ?? prev.contactPersonEmail,
           contactPersonPhone: draft.contact_person_phone ?? prev.contactPersonPhone,
           category: draft.category ?? prev.category,
-          stage: draft.project_stage 
-            ? (draft.project_stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) as ProjectStage)
-            : prev.stage,
+            stage: mappedStage,
           description: draft.description ?? prev.description,
           startDate: draft.start_date ? draft.start_date.split('T')[0] : prev.startDate,
           endDate: draft.end_date ? draft.end_date.split('T')[0] : prev.endDate,
@@ -294,13 +337,13 @@ export default function CreateProject() {
           state: draft.state ?? prev.state,
           city: draft.city ?? prev.city,
           ward: draft.ward ?? prev.ward,
-          
-        }))
+          }
+        })
         setCurrentDraftId(String(draft.id))
         setIsDraftLoaded(true)
       }
     }
-  }, [draftData, draftId, isDraftLoaded])
+  }, [draftData, draftId, isDraftLoaded, stages])
 
   // Mutation for saving draft
   const saveDraftMutation = useMutation({
@@ -743,7 +786,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <FileText className="h-5 w-5" />
+              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               <span>Project Identification</span>
             </CardTitle>
             <CardDescription>
@@ -817,7 +860,7 @@ export default function CreateProject() {
 
             <div className="border-t pt-4 mt-4">
               <h3 className="text-sm font-semibold mb-4 flex items-center">
-                <User className="h-4 w-4 mr-2" />
+                <User className="h-4 w-4 mr-2 text-cyan-600 dark:text-cyan-400" />
                 Contact Person Information *
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -902,7 +945,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <Building2 className="h-5 w-5" />
+              <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
               <span>Project Overview</span>
             </CardTitle>
             <CardDescription>
@@ -913,21 +956,61 @@ export default function CreateProject() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="category">Project Category *</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => handleChange('category', value)}
-                >
-                  <SelectTrigger className={errors.category ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectCategories.map((category) => (
-                      <SelectItem key={category} value={category}>
-                        {category}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={categoryOpen} onOpenChange={setCategoryOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={categoryOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.category && "border-red-500",
+                        !formData.category && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingCategories}
+                    >
+                      {isLoadingCategories ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading categories...
+                        </span>
+                      ) : formData.category ? (
+                        categories.find((cat) => cat.value === formData.category)?.value || formData.category
+                      ) : (
+                        "Select category"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search categories..." />
+                      <CommandList>
+                        <CommandEmpty>No category found.</CommandEmpty>
+                        <CommandGroup>
+                          {categories.map((category) => (
+                            <CommandItem
+                              key={category.id}
+                              value={category.value}
+                              onSelect={() => {
+                                handleChange('category', category.value)
+                                setCategoryOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.category === category.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {category.value}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.category && (
                   <p className="text-sm text-red-500">{errors.category}</p>
                 )}
@@ -935,21 +1018,61 @@ export default function CreateProject() {
 
               <div className="space-y-2">
                 <Label htmlFor="stage">Project Stage *</Label>
-                <Select
-                  value={formData.stage}
-                  onValueChange={(value) => handleChange('stage', value)}
-                >
-                  <SelectTrigger className={errors.stage ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectStages.map((stage) => (
-                      <SelectItem key={stage} value={stage}>
-                        {stage}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={stageOpen} onOpenChange={setStageOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={stageOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.stage && "border-red-500",
+                        !formData.stage && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingStages}
+                    >
+                      {isLoadingStages ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading stages...
+                        </span>
+                      ) : formData.stage ? (
+                        stages.find((st) => st.value === formData.stage)?.value || formData.stage
+                      ) : (
+                        "Select stage"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search stages..." />
+                      <CommandList>
+                        <CommandEmpty>No stage found.</CommandEmpty>
+                        <CommandGroup>
+                          {stages.map((stage) => (
+                            <CommandItem
+                              key={stage.id}
+                              value={stage.value}
+                              onSelect={() => {
+                                handleChange('stage', stage.value)
+                                setStageOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.stage === stage.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {stage.value}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.stage && (
                   <p className="text-sm text-red-500">{errors.stage}</p>
                 )}
@@ -1030,7 +1153,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <DollarSign className="h-5 w-5" />
+              <DollarSign className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
               <span>Financial Information</span>
             </CardTitle>
             <CardDescription>
@@ -1185,7 +1308,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <MapPin className="h-5 w-5" />
+              <MapPin className="h-5 w-5 text-purple-600 dark:text-purple-400" />
               <span>Location Details</span>
             </CardTitle>
             <CardDescription>
@@ -1266,7 +1389,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <FileText className="h-5 w-5" />
+              <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               <span>Documentation</span>
             </CardTitle>
             <CardDescription>
@@ -1484,7 +1607,7 @@ export default function CreateProject() {
             <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <ImageIcon className="h-5 w-5" />
+              <ImageIcon className="h-5 w-5 text-rose-600 dark:text-rose-400" />
               <span>Media & Transparency</span>
             </CardTitle>
             <CardDescription>

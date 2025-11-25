@@ -12,7 +12,6 @@ export { default as AdminInvitation } from "../features/users/pages/AdminInvitat
 export { default as MunicipalRatings } from "./MunicipalRatings"
 export { default as MunicipalAnalysis } from "./MunicipalAnalysis"
 export { default as AdminProjects } from "../features/admin/pages/AdminProjects"
-export { default as AdminProjectValidation } from "../features/admin/pages/AdminProjectValidation"
 export { default as AdminProjectReview } from "../features/admin/pages/AdminProjectReview"
 export { default as AdminNotifications } from "../features/admin/pages/AdminNotifications"
 export { default as AdminUsers } from "../features/admin/pages/AdminUsers"

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Edit, Trash2, Calendar, Eye, CheckCircle2, DollarSign, Clock, IndianRupee, IndianRupeeIcon } from 'lucide-react'
+import { FileText, Edit, Trash2, Calendar, Eye, CheckCircle2, Clock, IndianRupeeIcon, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +32,7 @@ interface ProjectDraft {
 
 interface SubmittedProject {
   id: number
+  project_reference_id?: string
   title: string
   organization_id: string
   category: string
@@ -259,6 +260,17 @@ export default function MyDrafts() {
       ),
     },
     {
+      accessorKey: 'project_reference_id',
+      header: 'Reference ID',
+      cell: ({ row }) => (
+        <div className="min-w-[120px]">
+          <span className="font-mono text-sm text-muted-foreground">
+            {row.original.project_reference_id || 'N/A'}
+          </span>
+        </div>
+      ),
+    },
+    {
       accessorKey: 'category',
       header: 'Category',
       cell: ({ row }) => {
@@ -270,19 +282,19 @@ export default function MyDrafts() {
         )
       },
     },
-    {
-      accessorKey: 'project_stage',
-      header: 'Stage',
-      cell: ({ row }) => {
-        const stage = row.original.project_stage || '—'
-        const formattedStage = stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-        return (
-          <Badge className={getStageColor(stage)}>
-            {formattedStage}
-          </Badge>
-        )
-      },
-    },
+    // {
+    //   accessorKey: 'project_stage',
+    //   header: 'Stage',
+    //   cell: ({ row }) => {
+    //     const stage = row.original.project_stage || '—'
+    //     const formattedStage = stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+    //     return (
+    //       <Badge className={getStageColor(stage)}>
+    //         {formattedStage}
+    //       </Badge>
+    //     )
+    //   },
+    // },
     {
       accessorKey: 'status',
       header: 'Status',
@@ -294,7 +306,7 @@ export default function MyDrafts() {
             {formattedStatus}
           </Badge>
         )
-      },
+      }
     },
     {
       accessorKey: 'funding_requirement',
@@ -375,6 +387,16 @@ export default function MyDrafts() {
 
   const draftsList = Array.isArray(drafts) ? drafts : []
   const projectsList = Array.isArray(projects) ? projects : []
+  // Filter rejected projects (status contains 'rejected' or 'reject')
+  const rejectedProjectsList = projectsList.filter((project: SubmittedProject) => {
+    const status = project.status?.toLowerCase() || ''
+    return status.includes('rejected') || status.includes('reject')
+  })
+  // Filter submitted projects (exclude rejected ones)
+  const submittedProjectsList = projectsList.filter((project: SubmittedProject) => {
+    const status = project.status?.toLowerCase() || ''
+    return !status.includes('rejected') && !status.includes('reject')
+  })
 
   return (
     <div className="space-y-6">
@@ -392,9 +414,9 @@ export default function MyDrafts() {
         </Button>
       </div>
 
-      {/* Tabs for Drafts and Submitted Projects */}
+      {/* Tabs for Drafts, Submitted, and Rejected Projects */}
       <Tabs defaultValue="drafts" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="drafts" className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             Drafts
@@ -407,9 +429,18 @@ export default function MyDrafts() {
           <TabsTrigger value="submitted" className="flex items-center gap-2">
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
             Submitted
-            {projectsList.length > 0 && (
+            {submittedProjectsList.length > 0 && (
               <Badge className="ml-2 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                {projectsList.length}
+                {submittedProjectsList.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="rejected" className="flex items-center gap-2">
+            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            Send Back
+            {rejectedProjectsList.length > 0 && (
+              <Badge className="ml-2 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                {rejectedProjectsList.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -450,7 +481,7 @@ export default function MyDrafts() {
 
         {/* Submitted Projects Tab */}
         <TabsContent value="submitted" className="space-y-4">
-          {projectsList.length === 0 ? (
+          {submittedProjectsList.length === 0 ? (
             <Card className="border-2 border-dashed border-green-200 dark:border-green-800 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <div className="p-4 rounded-full bg-green-100 dark:bg-green-900/30 mb-4">
@@ -472,11 +503,44 @@ export default function MyDrafts() {
           ) : (
             <DataTable<SubmittedProject, any>
               title="Submitted Projects"
-              description={`You have ${projectsList.length} submitted project${projectsList.length !== 1 ? 's' : ''}. These projects are in the validation or approval process.`}
+              description={`You have ${submittedProjectsList.length} submitted project${submittedProjectsList.length !== 1 ? 's' : ''}. These projects are in the validation or approval process.`}
               columns={projectColumns}
-              data={projectsList}
+              data={submittedProjectsList}
               enableExport={true}
               exportFilename="submitted-projects.csv"
+            />
+          )}
+        </TabsContent>
+
+        {/* Sent Back Projects Tab */}
+        <TabsContent value="rejected" className="space-y-4">
+          {rejectedProjectsList.length === 0 ? (
+            <Card className="border-2 border-dashed border-red-200 dark:border-red-800 bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950/20 dark:to-rose-950/20">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="p-4 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                  <XCircle className="h-12 w-12 text-red-600 dark:text-red-400" />
+                </div>
+                <CardTitle className="mb-2 text-red-900 dark:text-red-100">No Sent Back Projects</CardTitle>
+                <CardDescription className="mb-4 text-center text-red-700 dark:text-red-300">
+                  You don't have any projects sent back for revision. Projects that are sent back will appear here.
+                </CardDescription>
+                <Button 
+                  onClick={() => navigate('/main/admin/projects/create')}
+                  className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Create New Project
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <DataTable<SubmittedProject, any>
+              title="Sent Back Projects"
+              description={`You have ${rejectedProjectsList.length} project${rejectedProjectsList.length !== 1 ? 's' : ''} sent back for revision. Review the feedback and resubmit after making necessary changes.`}
+              columns={projectColumns}
+              data={rejectedProjectsList}
+              enableExport={true}
+              exportFilename="sent-back-projects.csv"
             />
           )}
         </TabsContent>
