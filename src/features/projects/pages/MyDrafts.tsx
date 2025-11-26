@@ -154,7 +154,7 @@ export default function MyDrafts() {
       accessorKey: 'title',
       header: 'Title',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-[260px]">
           <div className="p-1.5 rounded-md bg-amber-100 dark:bg-amber-900/30">
             <FileText className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           </div>
@@ -168,7 +168,7 @@ export default function MyDrafts() {
       cell: ({ row }) => {
         const category = row.original.category || '—'
         return (
-          <Badge className={getCategoryColor(category)}>
+          <Badge className={`min-w-[140px] justify-center ${getCategoryColor(category)}`}>
             {category}
           </Badge>
         )
@@ -181,7 +181,7 @@ export default function MyDrafts() {
         const stage = row.original.project_stage || '—'
         const formattedStage = stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
         return (
-          <Badge className={getStageColor(stage)}>
+          <Badge className={`min-w-[140px] justify-center ${getStageColor(stage)}`}>
             {formattedStage}
           </Badge>
         )
@@ -191,7 +191,7 @@ export default function MyDrafts() {
       accessorKey: 'funding_requirement',
       header: 'Funding Required',
       cell: ({ row }) => (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-[160px]">
           <IndianRupeeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
           <span className="text-sm font-semibold text-green-700 dark:text-green-300">
             {formatCurrency(row.original.funding_requirement)}
@@ -203,7 +203,7 @@ export default function MyDrafts() {
       accessorKey: 'updated_at',
       header: 'Last Updated',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm min-w-[180px]">
           <Clock className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />
           <span className="text-muted-foreground">{formatDate(row.original.updated_at)}</span>
         </div>
@@ -215,7 +215,7 @@ export default function MyDrafts() {
       cell: ({ row }) => (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
+            <Button variant="ghost" className="h-8 w-8 p-0 min-w-[80px]">
               <span className="sr-only">Open menu</span>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
@@ -256,7 +256,7 @@ export default function MyDrafts() {
       accessorKey: 'title',
       header: 'Title',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-[220px]">
           <div className="p-1.5 rounded-md bg-green-100 dark:bg-green-900/30">
             <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
           </div>
@@ -268,7 +268,7 @@ export default function MyDrafts() {
       accessorKey: 'project_reference_id',
       header: 'Reference ID',
       cell: ({ row }) => (
-        <div className="min-w-[120px]">
+        <div className="min-w-[160px]">
           <span className="font-mono text-sm text-muted-foreground">
             {row.original.project_reference_id || 'N/A'}
           </span>
@@ -281,7 +281,7 @@ export default function MyDrafts() {
       cell: ({ row }) => {
         const category = row.original.category || '—'
         return (
-          <Badge className={getCategoryColor(category)}>
+          <Badge className={`min-w-[140px] justify-center ${getCategoryColor(category)}`}>
             {category}
           </Badge>
         )
@@ -307,9 +307,11 @@ export default function MyDrafts() {
         const status = row.original.status || '—'
         const formattedStatus = status.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
         return (
-          <Badge className={`${getStatusColor(status)} border`}>
-            {formattedStatus}
-          </Badge>
+          <div className="min-w-[160px] flex justify-start">
+            <Badge className={`${getStatusColor(status)} border`}>
+              {formattedStatus}
+            </Badge>
+          </div>
         )
       }
     },
@@ -317,7 +319,7 @@ export default function MyDrafts() {
       accessorKey: 'funding_requirement',
       header: 'Funding Required',
       cell: ({ row }) => (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 min-w-[160px]">
           <IndianRupeeIcon className="h-4 w-4 text-green-600 dark:text-green-400" />
           <span className="text-sm font-semibold text-green-700 dark:text-green-300">
             {formatCurrency(row.original.funding_requirement)}
@@ -329,7 +331,7 @@ export default function MyDrafts() {
       accessorKey: 'created_at',
       header: 'Submitted On',
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm min-w-[180px]">
           <Calendar className="h-3.5 w-3.5 text-purple-500 dark:text-purple-400" />
           <span className="text-muted-foreground">{formatDate(row.original.created_at)}</span>
         </div>
@@ -366,7 +368,7 @@ export default function MyDrafts() {
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0">
+              <Button variant="ghost" className="h-8 w-8 p-0 min-w-[80px]">
                 <span className="sr-only">Open menu</span>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>

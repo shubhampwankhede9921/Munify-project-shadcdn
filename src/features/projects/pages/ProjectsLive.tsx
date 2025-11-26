@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
+import { useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -35,6 +36,7 @@ export default function ProjectsLive() {
   const [fundingAmount, setFundingAmount] = useState("")
   const [selectedPartyId, setSelectedPartyId] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [favoritedProjects, setFavoritedProjects] = useState<Set<number>>(new Set())
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -261,6 +263,87 @@ export default function ProjectsLive() {
       alerts.error("Error", message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // Mutation for adding project to favorites
+  const addToFavoritesMutation = useMutation({
+    mutationFn: (data: { project_reference_id: string; organization_id: string; user_id: string; created_by: string }) =>
+      apiService.post("/project-favorites/", data),
+    onSuccess: (_, variables) => {
+      // Find the project by reference ID and mark as favorited
+      const project = projects.find(p => 
+        p.project_reference_id === variables.project_reference_id /*|| 
+        p.id?.toString() === variables.project_reference_id ||
+        `PROJ-${p.id}` === variables.project_reference_id*/
+      )
+      if (project) {
+        setFavoritedProjects(prev => new Set(prev).add(project.id))
+      }
+      alerts.success("Success", "Project added to favorites successfully")
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message || err?.response?.data?.detail || "Failed to add project to favorites. Please try again."
+      alerts.error("Error", message)
+    },
+  })
+
+  // Mutation for removing project from favorites
+  const removeFromFavoritesMutation = useMutation({
+    mutationFn: ({ project_reference_id, user_id }: { project_reference_id: string; user_id: string }) => {
+      const params = new URLSearchParams({
+        project_reference_id,
+        user_id
+      })
+      return apiService.delete(`/project-favorites/?${params.toString()}`)
+    },
+    onSuccess: (_, variables) => {
+      // Find the project by reference ID and remove from favorites
+      const project = projects.find(p => 
+        p.project_reference_id === variables.project_reference_id /*|| 
+        p.id?.toString() === variables.project_reference_id ||
+        `PROJ-${p.id}` === variables.project_reference_id*/
+      )
+      if (project) {
+        setFavoritedProjects(prev => {
+          const newSet = new Set(prev)
+          newSet.delete(project.id)
+          return newSet
+        })
+      }
+      alerts.success("Success", "Project removed from favorites successfully")
+    },
+    onError: (err: any) => {
+      const message = err?.response?.data?.message || err?.response?.data?.detail || "Failed to remove project from favorites. Please try again."
+      alerts.error("Error", message)
+    },
+  })
+
+  const handleToggleFavorites = (project: any) => {
+    const projectReferenceId = project.project_reference_id
+
+    if (!projectReferenceId) {
+      alerts.error("Validation Error", "Project reference ID not found")
+      return
+    }
+
+    const userId = "shubhamw20" // TODO: Get from auth context
+    const isFavorited = favoritedProjects.has(project.id)
+
+    if (isFavorited) {
+      // Remove from favorites
+      removeFromFavoritesMutation.mutate({
+        project_reference_id: projectReferenceId.toString(),
+        user_id: userId
+      })
+    } else {
+      // Add to favorites
+      addToFavoritesMutation.mutate({
+        project_reference_id: projectReferenceId.toString(),
+        organization_id: project.organization_id,
+        user_id: userId,
+        created_by: userId
+      })
     }
   }
 
@@ -588,8 +671,17 @@ export default function ProjectsLive() {
                 >
                   <MessageCircle className="h-4 w-4" />
                 </Button>
-                <Button variant="outline" size="icon" title="Add to Favorites">
-                  <Heart className="h-4 w-4" />
+                <Button 
+                  variant="outline" 
+                  size="icon" 
+                  title={favoritedProjects.has(id) ? "Remove from Favorites" : "Add to Favorites"}
+                  onClick={() => handleToggleFavorites(p)}
+                  disabled={addToFavoritesMutation.isPending || removeFromFavoritesMutation.isPending}
+                  className={favoritedProjects.has(id) ? "bg-red-50 hover:bg-red-100" : ""}
+                >
+                  <Heart 
+                    className={`h-4 w-4 ${favoritedProjects.has(id) ? "fill-red-500 text-red-500" : ""}`} 
+                  />
                 </Button>
               </div>
             </CardContent>
