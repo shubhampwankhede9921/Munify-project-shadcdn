@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight, Check, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight, Check, ChevronDown, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -88,14 +89,23 @@ interface FormData {
 
 export default function CreateProject() {
   const navigate = useNavigate()
-  const { draftId } = useParams<{ draftId?: string }>()
+  const location = useLocation()
+  const { draftId, projectId } = useParams<{ draftId?: string; projectId?: string }>()
   const queryClient = useQueryClient()
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [activeTab, setActiveTab] = useState('identification')
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(draftId || null)
   const [isDraftLoaded, setIsDraftLoaded] = useState(false)
+  const [isRejectedProject, setIsRejectedProject] = useState(false)
+  const [isProjectLoaded, setIsProjectLoaded] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [stageOpen, setStageOpen] = useState(false)
+  
+  // Check if we're editing a rejected project
+  useEffect(() => {
+    const isRejected = location.pathname.includes('/rejected/')
+    setIsRejectedProject(isRejected)
+  }, [location.pathname])
 
   // Query for project categories
   const { data: categoriesResponse, isLoading: isLoadingCategories } = useQuery({
@@ -285,65 +295,90 @@ export default function CreateProject() {
       // Handle different response structures
       return response?.data || response
     },
-    enabled: !!draftId,
+    enabled: !!draftId && !isRejectedProject,
   })
+
+  // Query to load rejected project data if projectId exists
+  const { data: projectData, isLoading: isLoadingProject, isError: isProjectError } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const response = await apiService.get(`/projects/${projectId}`)
+      // Handle different response structures
+      return response?.data || response
+    },
+    enabled: !!projectId && isRejectedProject,
+  })
+
+  // Helper function to load project/draft data into form
+  const loadProjectDataIntoForm = (data: any, isProject: boolean = false) => {
+    const item = (data as any)?.data || data
+    
+    if (item && item.id) {
+      setFormData(prev => {
+        // Map stage value from API format to display format
+        let mappedStage = prev.stage
+        if (item.project_stage) {
+          // Try to find matching stage from API stages array (if loaded)
+          const apiStage = stages.length > 0 ? stages.find(st => 
+            st.value.toLowerCase().replace(/\s+/g, '_') === item.project_stage?.toLowerCase() ||
+            st.value === item.project_stage
+          ) : null
+          // If found, use the API value format; otherwise format the value
+          mappedStage = apiStage?.value || item.project_stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+        }
+        
+        return {
+          ...prev,
+          projectTitle: item.title ?? prev.projectTitle,
+          projectReferenceId: item.project_reference_id ?? prev.projectReferenceId,
+          municipalityId: item.organization_id ?? prev.municipalityId,
+          municipalityCode: item.organization_id ?? prev.municipalityCode,
+          department: item.department ?? prev.department,
+          contactPersonName: item.contact_person ?? prev.contactPersonName,
+          contactPersonDesignation: item.contact_person_designation ?? prev.contactPersonDesignation,
+          contactPersonEmail: item.contact_person_email ?? prev.contactPersonEmail,
+          contactPersonPhone: item.contact_person_phone ?? prev.contactPersonPhone,
+          category: item.category ?? prev.category,
+          stage: mappedStage,
+          description: item.description ?? prev.description,
+          startDate: item.start_date ? item.start_date.split('T')[0] : prev.startDate,
+          endDate: item.end_date ? item.end_date.split('T')[0] : prev.endDate,
+          totalProjectCost: item.total_project_cost != null ? String(item.total_project_cost) : prev.totalProjectCost,
+          fundingRequirement: item.funding_requirement != null ? String(item.funding_requirement) : prev.fundingRequirement,
+          alreadySecuredFunds: item.already_secured_funds != null ? String(item.already_secured_funds) : prev.alreadySecuredFunds,
+          fundraisingStartDate: item.fundraising_start_date ? item.fundraising_start_date.split('T')[0] : prev.fundraisingStartDate,
+          fundraisingEndDate: item.fundraising_end_date ? item.fundraising_end_date.split('T')[0] : prev.fundraisingEndDate,
+          municipalityCreditRating: item.municipality_credit_rating ?? prev.municipalityCreditRating,
+          municipalityCreditScore: item.municipality_credit_score != null ? String(item.municipality_credit_score) : prev.municipalityCreditScore,
+          // Location fields if available
+          state: item.state ?? prev.state,
+          city: item.city ?? prev.city,
+          ward: item.ward ?? prev.ward,
+        }
+      })
+      
+      if (!isProject) {
+        setCurrentDraftId(String(item.id))
+        setIsDraftLoaded(true)
+      } else {
+        setIsProjectLoaded(true)
+      }
+    }
+  }
 
   // Load draft data into form when draft is loaded
   useEffect(() => {
-    if (draftData && draftId && !isDraftLoaded) {
-      // Handle different response structures - could be wrapped in 'data' property
-      const draft = (draftData as any)?.data || draftData
-      
-      if (draft && draft.id) {
-        // Debug: Uncomment to see draft data being loaded
-        // console.log('Loading draft data:', draft)
-        
-        setFormData(prev => {
-          // Map stage value from API format to display format
-          let mappedStage = prev.stage
-          if (draft.project_stage) {
-            // Try to find matching stage from API stages array (if loaded)
-            const apiStage = stages.length > 0 ? stages.find(st => 
-              st.value.toLowerCase().replace(/\s+/g, '_') === draft.project_stage?.toLowerCase() ||
-              st.value === draft.project_stage
-            ) : null
-            // If found, use the API value format; otherwise format the draft value
-            mappedStage = apiStage?.value || draft.project_stage.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-          }
-          
-          return {
-          ...prev,
-          projectTitle: draft.title ?? prev.projectTitle,
-          municipalityId: draft.organization_id ?? prev.municipalityId,
-          municipalityCode: draft.organization_id ?? prev.municipalityCode,
-          department: draft.department ?? prev.department,
-          contactPersonName: draft.contact_person ?? prev.contactPersonName,
-          contactPersonDesignation: draft.contact_person_designation ?? prev.contactPersonDesignation,
-          contactPersonEmail: draft.contact_person_email ?? prev.contactPersonEmail,
-          contactPersonPhone: draft.contact_person_phone ?? prev.contactPersonPhone,
-          category: draft.category ?? prev.category,
-            stage: mappedStage,
-          description: draft.description ?? prev.description,
-          startDate: draft.start_date ? draft.start_date.split('T')[0] : prev.startDate,
-          endDate: draft.end_date ? draft.end_date.split('T')[0] : prev.endDate,
-          totalProjectCost: draft.total_project_cost != null ? String(draft.total_project_cost) : prev.totalProjectCost,
-          fundingRequirement: draft.funding_requirement != null ? String(draft.funding_requirement) : prev.fundingRequirement,
-          alreadySecuredFunds: draft.already_secured_funds != null ? String(draft.already_secured_funds) : prev.alreadySecuredFunds,
-          fundraisingStartDate: draft.fundraising_start_date ? draft.fundraising_start_date.split('T')[0] : prev.fundraisingStartDate,
-          fundraisingEndDate: draft.fundraising_end_date ? draft.fundraising_end_date.split('T')[0] : prev.fundraisingEndDate,
-          municipalityCreditRating: draft.municipality_credit_rating ?? prev.municipalityCreditRating,
-          municipalityCreditScore: draft.municipality_credit_score != null ? String(draft.municipality_credit_score) : prev.municipalityCreditScore,
-          // Location fields if available in draft
-          state: draft.state ?? prev.state,
-          city: draft.city ?? prev.city,
-          ward: draft.ward ?? prev.ward,
-          }
-        })
-        setCurrentDraftId(String(draft.id))
-        setIsDraftLoaded(true)
-      }
+    if (draftData && draftId && !isDraftLoaded && !isRejectedProject) {
+      loadProjectDataIntoForm(draftData, false)
     }
-  }, [draftData, draftId, isDraftLoaded, stages])
+  }, [draftData, draftId, isDraftLoaded, isRejectedProject, stages])
+
+  // Load rejected project data into form when project is loaded
+  useEffect(() => {
+    if (projectData && projectId && !isProjectLoaded && isRejectedProject) {
+      loadProjectDataIntoForm(projectData, true)
+    }
+  }, [projectData, projectId, isProjectLoaded, isRejectedProject, stages])
 
   // Mutation for saving draft
   const saveDraftMutation = useMutation({
@@ -400,6 +435,65 @@ export default function CreateProject() {
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to submit project. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Helper function to map form data to resubmit API payload
+  const mapFormDataToResubmitPayload = (): any => {
+    // Convert project stage to lowercase with underscores for API
+    const projectStage = formData.stage ? formData.stage.toLowerCase().replace(/\s+/g, '_') : 'planning'
+    
+    // Format dates for API
+    const startDate = formData.startDate || ''
+    const endDate = formData.endDate || ''
+    
+    // Format fundraising dates from user input
+    const fundraisingStartDate = formData.fundraisingStartDate ? `${formData.fundraisingStartDate}T00:00:00Z` : undefined
+    const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59Z` : undefined
+
+    return {
+      organization_type: 'municipality',
+      organization_id: formData.municipalityId || formData.municipalityCode || '',
+      title: formData.projectTitle,
+      department: formData.department || '',
+      contact_person: formData.contactPersonName,
+      contact_person_designation: formData.contactPersonDesignation || undefined,
+      contact_person_email: formData.contactPersonEmail || undefined,
+      contact_person_phone: formData.contactPersonPhone || undefined,
+      category: formData.category,
+      project_stage: projectStage,
+      description: formData.description,
+      start_date: startDate,
+      end_date: endDate,
+      total_project_cost: formData.totalProjectCost || '0.00',
+      funding_requirement: formData.fundingRequirement || '0.00',
+      already_secured_funds: formData.alreadySecuredFunds || '0.00',
+      fundraising_start_date: fundraisingStartDate,
+      fundraising_end_date: fundraisingEndDate,
+      municipality_credit_rating: formData.municipalityCreditRating || '',
+      municipality_credit_score: formData.municipalityCreditScore || '',
+      // Location fields
+      state: formData.state || undefined,
+      city: formData.city || undefined,
+      ward: formData.ward || undefined,
+    }
+  }
+
+  // Mutation for resubmitting rejected project
+  const resubmitProjectMutation = useMutation({
+    mutationFn: (payload: any) => {
+      if (!projectId) throw new Error('Project ID is required for resubmission')
+      return apiService.post(`/projects/${projectId}/resubmit`, payload)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] })
+      queryClient.invalidateQueries({ queryKey: ['project', projectId] })
+      alerts.success('Project Resubmitted', 'Your project has been resubmitted for validation. It will be reviewed by an admin.')
+      navigate('/main/admin/projects/drafts')
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to resubmit project. Please try again.'
       alerts.error('Error', errorMessage)
     },
   })
@@ -636,6 +730,11 @@ export default function CreateProject() {
   }
 
   const handleSaveDraft = () => {
+    // Don't allow saving drafts for rejected projects - they must be resubmitted
+    if (isRejectedProject) {
+      alerts.error('Invalid Action', 'Rejected projects cannot be saved as drafts. Please resubmit the project instead.')
+      return
+    }
     const payload = mapFormDataToDraftPayload()
     saveDraftMutation.mutate(payload)
   }
@@ -677,8 +776,13 @@ export default function CreateProject() {
       return
     }
 
+    // If we're resubmitting a rejected project
+    if (isRejectedProject && projectId) {
+      const payload = mapFormDataToResubmitPayload()
+      resubmitProjectMutation.mutate(payload)
+    }
     // If we have a draft ID, submit the draft (which will create the project from draft data)
-    if (currentDraftId) {
+    else if (currentDraftId) {
       submitDraftMutation.mutate(currentDraftId)
     } else {
       // If no draft exists, create project directly using the project creation API
@@ -687,26 +791,30 @@ export default function CreateProject() {
     }
   }
 
-  // Show loading state while draft is being loaded
-  if (isLoadingDraft && draftId) {
+  // Show loading state while draft or project is being loaded
+  if ((isLoadingDraft && draftId && !isRejectedProject) || (isLoadingProject && projectId && isRejectedProject)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-2 text-muted-foreground">Loading draft...</p>
+          <p className="mt-2 text-muted-foreground">
+            {isRejectedProject ? 'Loading project...' : 'Loading draft...'}
+          </p>
         </div>
       </div>
     )
   }
 
-  // Show error state if draft failed to load
-  if (isDraftError && draftId) {
+  // Show error state if draft or project failed to load
+  if ((isDraftError && draftId && !isRejectedProject) || (isProjectError && projectId && isRejectedProject)) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <p className="text-destructive mb-4">Failed to load draft. Please try again.</p>
+          <p className="text-destructive mb-4">
+            {isRejectedProject ? 'Failed to load project. Please try again.' : 'Failed to load draft. Please try again.'}
+          </p>
           <Button onClick={() => navigate('/main/admin/projects/drafts')}>
-            Back to Drafts
+            Back to Projects
           </Button>
         </div>
       </div>
@@ -727,14 +835,32 @@ export default function CreateProject() {
             
           </Button>
           <div>
-            <h1 className="text-3xl font-bold">Create New Project</h1>
+            <h1 className="text-3xl font-bold">
+              {isRejectedProject ? 'Edit & Resubmit Project' : 'Create New Project'}
+            </h1>
             <p className="text-muted-foreground">
-              Fill in all required information to publish your project
+              {isRejectedProject 
+                ? 'Review admin feedback, make necessary changes, and resubmit your project for validation'
+                : 'Fill in all required information to publish your project'}
             </p>
           </div>
         </div>
       
       </div>
+
+      {/* Admin Notes Alert for Rejected Projects */}
+      {isRejectedProject && projectData && (
+        <Alert variant="destructive" className="border-red-200 bg-red-50 dark:bg-red-950/20">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Admin Feedback</AlertTitle>
+          <AlertDescription className="mt-2">
+            <p className="text-sm font-medium mb-1">Please review the following feedback before resubmitting:</p>
+            <p className="text-sm whitespace-pre-wrap">
+              {((projectData as any)?.data?.admin_notes || (projectData as any)?.admin_notes || 'No feedback available')}
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -1759,26 +1885,30 @@ export default function CreateProject() {
             type="button"
             variant="outline"
             onClick={() => navigate('/main/admin/projects/drafts')}
-            disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
+            disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending || resubmitProjectMutation.isPending}
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleSaveDraft}
-            disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            {saveDraftMutation.isPending ? 'Saving...' : 'Save as Draft'}
-          </Button>
+          {!isRejectedProject && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending || resubmitProjectMutation.isPending}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              {saveDraftMutation.isPending ? 'Saving...' : 'Save as Draft'}
+            </Button>
+          )}
           {allTabsComplete && (
             <Button
               type="submit"
-              disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending}
+              disabled={createProjectMutation.isPending || submitDraftMutation.isPending || saveDraftMutation.isPending || resubmitProjectMutation.isPending}
             >
               <Save className="h-4 w-4 mr-2" />
-              {createProjectMutation.isPending || submitDraftMutation.isPending ? 'Submitting...' : 'Submit for Validation'}
+              {isRejectedProject 
+                ? (resubmitProjectMutation.isPending ? 'Resubmitting...' : 'Resubmit Project')
+                : (createProjectMutation.isPending || submitDraftMutation.isPending ? 'Submitting...' : 'Submit for Validation')}
             </Button>
           )}
         </div>
@@ -1786,4 +1916,5 @@ export default function CreateProject() {
     </div>
   )
 }
+
 

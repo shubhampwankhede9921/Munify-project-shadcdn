@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Edit, Trash2, Calendar, Eye, CheckCircle2, Clock, IndianRupeeIcon, XCircle } from 'lucide-react'
+import { FileText, Edit, Trash2, Calendar, Eye, CheckCircle2, Clock, IndianRupeeIcon, XCircle, RotateCcw, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +42,7 @@ interface SubmittedProject {
   updated_at: string
   total_project_cost?: number
   funding_requirement?: number
+  admin_notes?: string
 }
 
 export default function MyDrafts() {
@@ -95,6 +96,10 @@ export default function MyDrafts() {
 
   const handleViewProject = (projectId: number) => {
     navigate(`/main/projects/${projectId}`)
+  }
+
+  const handleEditRejectedProject = (projectId: number) => {
+    navigate(`/main/admin/projects/create/rejected/${projectId}`)
   }
 
   const formatDate = (dateString: string) => {
@@ -331,26 +336,61 @@ export default function MyDrafts() {
       ),
     },
     {
+      accessorKey: 'admin_notes',
+      header: 'Rejection Note',
+      cell: ({ row }) => {
+        const isRejected = row.original.status?.toLowerCase().includes('rejected') || row.original.status?.toLowerCase().includes('reject')
+        const adminNotes = row.original.admin_notes
+        
+        if (!isRejected || !adminNotes) {
+          return <span className="text-muted-foreground text-sm">—</span>
+        }
+        
+        return (
+          <div className="max-w-[350px]">
+            <div className="flex items-start gap-2 p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-md">
+              <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-red-900 dark:text-red-100 line-clamp-3 leading-relaxed">
+                {adminNotes}
+              </p>
+            </div>
+          </div>
+        )
+      },
+    },
+    {
       id: 'actions',
       header: 'Actions',
-      cell: ({ row }) => (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Open menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => handleViewProject(row.original.id)}>
-              <Eye className="mr-2 h-4 w-4" />
-              View Project
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ),
+      cell: ({ row }) => {
+        const isRejected = row.original.status?.toLowerCase().includes('rejected') || row.original.status?.toLowerCase().includes('reject')
+        return (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" className="h-8 w-8 p-0">
+                <span className="sr-only">Open menu</span>
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleViewProject(row.original.id)}>
+                <Eye className="mr-2 h-4 w-4" />
+                View Project
+              </DropdownMenuItem>
+              {isRejected && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => handleEditRejectedProject(row.original.id)}>
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Edit & Resubmit
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )
+      },
     },
   ]
 

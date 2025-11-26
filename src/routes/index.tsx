@@ -73,6 +73,7 @@ export const router = createBrowserRouter([
       
       { path: "admin/projects/create", element: <CreateProject /> },
       { path: "admin/projects/create/:draftId", element: <CreateProject /> },
+      { path: "admin/projects/create/rejected/:projectId", element: <CreateProject /> },
       { path: "admin/projects/drafts", element: <MyDrafts /> },
       // removed AddParty route
       { path: "admin/notifications", element: <AdminNotifications /> },
