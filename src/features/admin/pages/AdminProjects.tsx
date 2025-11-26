@@ -343,7 +343,7 @@ export default function AdminProjects() {
       cell: ({ row }) => {
         const project = row.original
         return (
-          <div className="w-auto">
+          <div className="min-w-[160px]">
             <span className="font-mono text-sm font-medium text-muted-foreground">{project.project_reference_id || 'N/A'}</span>
           </div>
         )
@@ -378,7 +378,7 @@ export default function AdminProjects() {
       cell: ({ row }) => {
         const project = row.original
         return (
-          <div className="min-w-auto">
+          <div className="min-w-[200px]">
             <div className="font-medium text-foreground">{getMunicipality(project)}</div>
             <div className="text-sm text-muted-foreground mt-0.5">{getState(project)}</div>
           </div>
@@ -399,7 +399,7 @@ export default function AdminProjects() {
       cell: ({ row }) => {
         const project = row.original
         return (
-          <div className="flex items-center w-auto">
+          <div className="flex items-center min-w-[160px]">
             {getStatusBadge(project.status || 'Unknown')}
           </div>
         )
@@ -465,9 +465,11 @@ export default function AdminProjects() {
       cell: ({ row }) => {
         const project = row.original
         return (
-          <span className="whitespace-nowrap text-xs text-muted-foreground">
-            {formatDate(project.created_at)}
-          </span>
+          <div className="min-w-[160px]">
+            <span className="whitespace-nowrap text-xs text-muted-foreground">
+              {formatDate(project.created_at)}
+            </span>
+          </div>
         )
       },
     },
