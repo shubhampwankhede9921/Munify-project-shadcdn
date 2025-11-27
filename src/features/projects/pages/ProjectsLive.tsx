@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +18,6 @@ import {
   Filter, 
   MapPin, 
   Clock,
-  TrendingUp,
   Star,
   Eye,
   Heart,
@@ -27,16 +26,60 @@ import {
   X
 } from "lucide-react"
 
+interface Project {
+  id: number
+  organization_type: string
+  organization_id: string
+  project_reference_id: string
+  title: string
+  department: string
+  contact_person: string
+  contact_person_designation: string
+  contact_person_email: string
+  contact_person_phone: string
+  category: string
+  project_stage: string
+  description: string
+  start_date: string
+  end_date: string
+  state: string
+  city: string
+  ward: string
+  total_project_cost: string
+  funding_requirement: string
+  already_secured_funds: string
+  commitment_gap: string | null
+  currency: string
+  fundraising_start_date: string
+  fundraising_end_date: string
+  municipality_credit_rating: string
+  municipality_credit_score: string
+  status: string
+  visibility: string
+  funding_raised: string
+  funding_percentage: string | null
+  approved_at: string
+  approved_by: string
+  admin_notes: string
+  created_at: string
+  created_by: string | null
+  updated_at: string
+  updated_by: string | null
+  is_favorite?: boolean
+  favorite_count?: number
+  [key: string]: any
+}
+
+const PROJECTS_QUERY_KEY = ["projects", "live"] as const
+
 export default function ProjectsLive() {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [projects, setProjects] = useState<any[]>([])
+  const queryClient = useQueryClient()
+
   const [fundingDialog, setFundingDialog] = useState<{ open: boolean; projectId: number | null }>({ open: false, projectId: null })
   const [fundingAmount, setFundingAmount] = useState("")
   const [selectedPartyId, setSelectedPartyId] = useState("")
   const [submitting, setSubmitting] = useState(false)
-  const [favoritedProjects, setFavoritedProjects] = useState<Set<number>>(new Set())
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -61,19 +104,65 @@ export default function ProjectsLive() {
     { id: 4, name: "State Bank of India" },
   ]
 
-  const fetchProjects = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await apiService.get("/projects/", { params: { skip: 0, limit: 100 } })
-      const list = res?.data
-      setProjects(list)
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Failed to load projects")
-    } finally {
-      setLoading(false)
+  const buildProjectQueryParams = (currentFilters: FilterState) => {
+    const queryParams: any = {
+      skip: 0,
+      limit: 10,
+      // Backend expects lowercase status, default to active list
+      status: "active",
+      user_id: "shubhamw20",
     }
+
+    // Add search parameter
+    if (currentFilters.search) {
+      queryParams.search = currentFilters.search
+    }
+
+    // Add category filters
+    if (currentFilters.categories.length > 0) {
+      queryParams.categories = currentFilters.categories.join(",")
+    }
+
+    // Add state filters
+    if (currentFilters.states.length > 0) {
+      queryParams.states = currentFilters.states.join(",")
+    }
+
+    // Add status filters (override default active if user selected)
+    if (currentFilters.status.length > 0) {
+      queryParams.status = currentFilters.status.map((s) => s.toLowerCase()).join(",")
+    }
+
+    // Advanced filters can be wired as backend supports them
+    if (currentFilters.fundingRange[0] > 0 || currentFilters.fundingRange[1] < 1000) {
+      queryParams.min_funding = currentFilters.fundingRange[0] * 10000000
+      queryParams.max_funding = currentFilters.fundingRange[1] * 10000000
+    }
+
+    if (currentFilters.progressRange[0] > 0 || currentFilters.progressRange[1] < 100) {
+      queryParams.min_progress = currentFilters.progressRange[0]
+      queryParams.max_progress = currentFilters.progressRange[1]
+    }
+
+    if (currentFilters.daysLeftRange[0] > 0 || currentFilters.daysLeftRange[1] < 365) {
+      queryParams.min_days_left = currentFilters.daysLeftRange[0]
+      queryParams.max_days_left = currentFilters.daysLeftRange[1]
+    }
+
+    return queryParams
   }
+
+  const {
+    data: projectsResponse,
+    isLoading,
+    isError,
+    error,
+  } = useQuery<any, any>({
+    queryKey: [...PROJECTS_QUERY_KEY, { filters }],
+    queryFn: () => apiService.get("/projects", buildProjectQueryParams(filters)),
+  })
+
+  const projects = useMemo<Project[]>(() => projectsResponse?.data ?? [], [projectsResponse])
 
   // Count active filters for UI display (only advanced filters)
   const activeFiltersCount = useMemo(() => {
@@ -81,7 +170,6 @@ export default function ProjectsLive() {
     if (filters.fundingRange[0] > 0 || filters.fundingRange[1] < 1000) count++
     if (filters.progressRange[0] > 0 || filters.progressRange[1] < 100) count++
     if (filters.daysLeftRange[0] > 0 || filters.daysLeftRange[1] < 365) count++
-    if (filters.interestRateRange[0] > 0 || filters.interestRateRange[1] < 25) count++
     return count
   }, [filters])
 
@@ -95,31 +183,24 @@ export default function ProjectsLive() {
     if (filters.fundingRange[0] > 0 || filters.fundingRange[1] < 1000) count++
     if (filters.progressRange[0] > 0 || filters.progressRange[1] < 100) count++
     if (filters.daysLeftRange[0] > 0 || filters.daysLeftRange[1] < 365) count++
-    if (filters.interestRateRange[0] > 0 || filters.interestRateRange[1] < 25) count++
     return count
   }, [filters])
 
   const handleFiltersChange = (newFilters: FilterState) => {
     setFilters(newFilters)
-    // Trigger API call with new filters
-    fetchProjectsWithFilters(newFilters)
   }
 
   const debouncedSearch = useCallback((searchValue: string) => {
-    // Clear existing timeout
     if (searchTimeout) {
       clearTimeout(searchTimeout)
     }
 
-    // Set new timeout
     const timeout = setTimeout(() => {
-      const newFilters = { ...filters, search: searchValue }
-      setFilters(newFilters)
-      fetchProjectsWithFilters(newFilters)
+      setFilters((prev) => ({ ...prev, search: searchValue }))
     }, 500) // 500ms delay
 
     setSearchTimeout(timeout)
-  }, [filters, searchTimeout])
+  }, [searchTimeout])
 
   const handleClearFilters = () => {
     const clearedFilters: FilterState = {
@@ -130,80 +211,10 @@ export default function ProjectsLive() {
       fundingRange: [0, 1000] as [number, number],
       progressRange: [0, 100] as [number, number],
       daysLeftRange: [0, 365] as [number, number],
-      interestRateRange: [0, 25] as [number, number]
+      interestRateRange: [0, 25] as [number, number],
     }
     setFilters(clearedFilters)
-    // Trigger API call with cleared filters
-    fetchProjectsWithFilters(clearedFilters)
   }
-
-  const fetchProjectsWithFilters = async (currentFilters: FilterState) => {
-    setLoading(true)
-    setError(null)
-    try {
-      // Prepare query parameters for backend
-      const queryParams: any = {
-        skip: 0,
-        limit: 100
-      }
-
-      // Add search parameter
-      if (currentFilters.search) {
-        queryParams.search = currentFilters.search
-      }
-
-      // Add category filters
-      if (currentFilters.categories.length > 0) {
-        queryParams.categories = currentFilters.categories.join(',')
-      }
-
-      // Add state filters
-      if (currentFilters.states.length > 0) {
-        queryParams.states = currentFilters.states.join(',')
-      }
-
-      // Add status filters
-      if (currentFilters.status.length > 0) {
-        queryParams.status = currentFilters.status.join(',')
-      }
-
-      // Add funding range
-      if (currentFilters.fundingRange[0] > 0 || currentFilters.fundingRange[1] < 1000) {
-        queryParams.min_funding = currentFilters.fundingRange[0] * 10000000 // Convert to actual amount
-        queryParams.max_funding = currentFilters.fundingRange[1] * 10000000
-      }
-
-      // Add progress range
-      if (currentFilters.progressRange[0] > 0 || currentFilters.progressRange[1] < 100) {
-        queryParams.min_progress = currentFilters.progressRange[0]
-        queryParams.max_progress = currentFilters.progressRange[1]
-      }
-
-      // Add days left range
-      if (currentFilters.daysLeftRange[0] > 0 || currentFilters.daysLeftRange[1] < 365) {
-        queryParams.min_days_left = currentFilters.daysLeftRange[0]
-        queryParams.max_days_left = currentFilters.daysLeftRange[1]
-      }
-
-      // Add interest rate range
-      if (currentFilters.interestRateRange[0] > 0 || currentFilters.interestRateRange[1] < 25) {
-        queryParams.min_interest_rate = currentFilters.interestRateRange[0]
-        queryParams.max_interest_rate = currentFilters.interestRateRange[1]
-      }
-
-      const res = await apiService.get("/projects/", { params: queryParams })
-      const list = res?.data
-      setProjects(list)
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Failed to load projects")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchProjects()
-  }, [])
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -257,7 +268,7 @@ export default function ProjectsLive() {
       setFundingDialog({ open: false, projectId: null })
       setFundingAmount("")
       setSelectedPartyId("")
-      await fetchProjects()
+      await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
     } catch (err: any) {
       const message = err?.response?.data?.message || "Failed to commit funding. Please try again."
       alerts.error("Error", message)
@@ -270,16 +281,8 @@ export default function ProjectsLive() {
   const addToFavoritesMutation = useMutation({
     mutationFn: (data: { project_reference_id: string; organization_id: string; user_id: string; created_by: string }) =>
       apiService.post("/project-favorites/", data),
-    onSuccess: (_, variables) => {
-      // Find the project by reference ID and mark as favorited
-      const project = projects.find(p => 
-        p.project_reference_id === variables.project_reference_id /*|| 
-        p.id?.toString() === variables.project_reference_id ||
-        `PROJ-${p.id}` === variables.project_reference_id*/
-      )
-      if (project) {
-        setFavoritedProjects(prev => new Set(prev).add(project.id))
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
       alerts.success("Success", "Project added to favorites successfully")
     },
     onError: (err: any) => {
@@ -297,20 +300,8 @@ export default function ProjectsLive() {
       })
       return apiService.delete(`/project-favorites/?${params.toString()}`)
     },
-    onSuccess: (_, variables) => {
-      // Find the project by reference ID and remove from favorites
-      const project = projects.find(p => 
-        p.project_reference_id === variables.project_reference_id /*|| 
-        p.id?.toString() === variables.project_reference_id ||
-        `PROJ-${p.id}` === variables.project_reference_id*/
-      )
-      if (project) {
-        setFavoritedProjects(prev => {
-          const newSet = new Set(prev)
-          newSet.delete(project.id)
-          return newSet
-        })
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
       alerts.success("Success", "Project removed from favorites successfully")
     },
     onError: (err: any) => {
@@ -319,7 +310,7 @@ export default function ProjectsLive() {
     },
   })
 
-  const handleToggleFavorites = (project: any) => {
+  const handleToggleFavorites = (project: Project) => {
     const projectReferenceId = project.project_reference_id
 
     if (!projectReferenceId) {
@@ -328,7 +319,7 @@ export default function ProjectsLive() {
     }
 
     const userId = "shubhamw20" // TODO: Get from auth context
-    const isFavorited = favoritedProjects.has(project.id)
+    const isFavorited = Boolean(project.is_favorite)
 
     if (isFavorited) {
       // Remove from favorites
@@ -398,7 +389,6 @@ export default function ProjectsLive() {
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
                       onClick={() => {
                         setFilters(prev => ({ ...prev, search: "" }))
-                        fetchProjectsWithFilters({ ...filters, search: "" })
                       }}
                     >
                       <X className="h-3 w-3" />
@@ -437,7 +427,6 @@ export default function ProjectsLive() {
                   const newCategories = value === "all" ? [] : [value]
                   const newFilters = { ...filters, categories: newCategories }
                   setFilters(newFilters)
-                  fetchProjectsWithFilters(newFilters)
                 }}
               >
                 <SelectTrigger className="w-[180px] h-9">
@@ -462,7 +451,6 @@ export default function ProjectsLive() {
                   const newStates = value === "all" ? [] : [value]
                   const newFilters = { ...filters, states: newStates }
                   setFilters(newFilters)
-                  fetchProjectsWithFilters(newFilters)
                 }}
               >
                 <SelectTrigger className="w-[160px] h-9">
@@ -487,7 +475,6 @@ export default function ProjectsLive() {
                   const newStatus = value === "all" ? [] : [value]
                   const newFilters = { ...filters, status: newStatus }
                   setFilters(newFilters)
-                  fetchProjectsWithFilters(newFilters)
                 }}
               >
                 <SelectTrigger className="w-[150px] h-9">
@@ -528,13 +515,15 @@ export default function ProjectsLive() {
       </Card>
 
       {/* Projects Grid */}
-      {loading && (
+      {isLoading && (
         <div className="text-center text-sm text-muted-foreground">Loading projects...</div>
       )}
-      {error && (
-        <div className="text-center text-sm text-red-500">{error}</div>
+      {isError && (
+        <div className="text-center text-sm text-red-500">
+          {(error as any)?.response?.data?.message || (error as Error)?.message || "Failed to load projects"}
+        </div>
       )}
-      {!loading && !error && projects.length === 0 && (
+      {!isLoading && !isError && projects.length === 0 && (
         <div className="text-center py-12">
           <div className="text-muted-foreground mb-4">
             <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -557,13 +546,13 @@ export default function ProjectsLive() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {projects.map((p) => {
           const image = "https://images.unsplash.com/photo-1503387762-592deb58ef4e?q=80&w=1200&auto=format&fit=crop"
-          const name = p.project_title
-          const municipality = p.municipality_id || "—"
-          const state = p.location
-          const category = p.project_category
+          const name = p.title
+          const municipality = p.city || p.organization_id || "—"
+          const state = p.state
+          const category = p.category
           const description = p.description
-          const currentFunding = Number(p.funds_secured || 0)
-          const fundRequired = Number(p.funding_required || 0)
+          const currentFunding = Number(p.already_secured_funds || p.funding_raised || 0)
+          const fundRequired = Number(p.funding_requirement || 0)
           const progress = fundRequired > 0 ? Math.min(100, Math.round((currentFunding / fundRequired) * 100)) : 0
           const end = p.end_date ? new Date(p.end_date) : null
           const today = new Date()
@@ -571,7 +560,6 @@ export default function ProjectsLive() {
           const daysLeft = end ? Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24))) : 0
           const status = p.status
           const id = p.id
-          const interestRate = Number(12)
 
           return (
           <Card key={id} className="overflow-hidden hover:shadow-lg transition-shadow">
@@ -595,7 +583,7 @@ export default function ProjectsLive() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <Heart className="h-4 w-4" />
-                    <span className="text-sm">0</span>
+                    <span className="text-sm">{p.favorite_count || 0}</span>
                   </div>
                 </div>
               </div>
@@ -634,11 +622,7 @@ export default function ProjectsLive() {
                 </div>
                 
                 {/* Key Metrics */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex items-center space-x-2">
-                    <TrendingUp className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{interestRate}% interest</span>
-                  </div>
+                <div className="grid grid-cols-1 gap-4 text-sm">
                   <div className="flex items-center space-x-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
                     <span>{daysLeft} days left</span>
@@ -674,13 +658,13 @@ export default function ProjectsLive() {
                 <Button 
                   variant="outline" 
                   size="icon" 
-                  title={favoritedProjects.has(id) ? "Remove from Favorites" : "Add to Favorites"}
+                  title={p.is_favorite ? "Remove from Favorites" : "Add to Favorites"}
                   onClick={() => handleToggleFavorites(p)}
                   disabled={addToFavoritesMutation.isPending || removeFromFavoritesMutation.isPending}
-                  className={favoritedProjects.has(id) ? "bg-red-50 hover:bg-red-100" : ""}
+                  className={p.is_favorite ? "bg-red-50 hover:bg-red-100" : ""}
                 >
                   <Heart 
-                    className={`h-4 w-4 ${favoritedProjects.has(id) ? "fill-red-500 text-red-500" : ""}`} 
+                    className={`h-4 w-4 ${p.is_favorite ? "fill-red-500 text-red-500" : ""}`} 
                   />
                 </Button>
               </div>

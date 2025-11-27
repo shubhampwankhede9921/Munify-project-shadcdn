@@ -233,6 +233,7 @@ export default function CreateProject() {
       total_project_cost: formData.totalProjectCost ? parseFloat(formData.totalProjectCost) : undefined,
       funding_requirement: formData.fundingRequirement ? parseFloat(formData.fundingRequirement) : undefined,
       already_secured_funds: formData.alreadySecuredFunds ? parseFloat(formData.alreadySecuredFunds) : undefined,
+      commitment_gap: commitmentGap > 0 ? commitmentGap : undefined,
       currency: 'INR',
       fundraising_start_date: fundraisingStartDate,
       fundraising_end_date: fundraisingEndDate,
@@ -275,12 +276,13 @@ export default function CreateProject() {
       total_project_cost: formData.totalProjectCost || '0.00',
       funding_requirement: formData.fundingRequirement || '0.00',
       already_secured_funds: formData.alreadySecuredFunds || '0.00',
+      commitment_gap: commitmentGap > 0 ? commitmentGap : undefined,
       fundraising_start_date: fundraisingStartDate,
       fundraising_end_date: fundraisingEndDate,
       municipality_credit_rating: formData.municipalityCreditRating || '',
       municipality_credit_score: formData.municipalityCreditScore || '',
       status: status,
-      visibility: '', // Default to private for MVP
+      visibility: 'public', // Default to private for MVP
       approved_by: null, // Will be set by backend on approval
       admin_notes: '', // Empty for new projects
       created_by: createdBy,
@@ -469,6 +471,7 @@ export default function CreateProject() {
       total_project_cost: formData.totalProjectCost || '0.00',
       funding_requirement: formData.fundingRequirement || '0.00',
       already_secured_funds: formData.alreadySecuredFunds || '0.00',
+      commitment_gap: commitmentGap > 0 ? commitmentGap : undefined,
       fundraising_start_date: fundraisingStartDate,
       fundraising_end_date: fundraisingEndDate,
       municipality_credit_rating: formData.municipalityCreditRating || '',
