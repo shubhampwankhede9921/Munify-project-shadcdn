@@ -6,13 +6,12 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { useNavigate } from "react-router-dom"
 import { apiService } from "@/services/api"
 import { alerts } from "@/lib/alerts"
-import { LoadingOverlay, Spinner } from "@/components/ui/spinner"
 import ProjectFilters, { type FilterState } from "@/components/ProjectFilters"
+import { FundingCommitmentDialog } from "@/features/projects/components/FundingCommitmentDialog"
+import { type Project, LIVE_PROJECTS_QUERY_KEY } from "@/features/projects/types"
 import { 
   Search, 
   Filter, 
@@ -26,60 +25,11 @@ import {
   X
 } from "lucide-react"
 
-interface Project {
-  id: number
-  organization_type: string
-  organization_id: string
-  project_reference_id: string
-  title: string
-  department: string
-  contact_person: string
-  contact_person_designation: string
-  contact_person_email: string
-  contact_person_phone: string
-  category: string
-  project_stage: string
-  description: string
-  start_date: string
-  end_date: string
-  state: string
-  city: string
-  ward: string
-  total_project_cost: string
-  funding_requirement: string
-  already_secured_funds: string
-  commitment_gap: string | null
-  currency: string
-  fundraising_start_date: string
-  fundraising_end_date: string
-  municipality_credit_rating: string
-  municipality_credit_score: string
-  status: string
-  visibility: string
-  funding_raised: string
-  funding_percentage: string | null
-  approved_at: string
-  approved_by: string
-  admin_notes: string
-  created_at: string
-  created_by: string | null
-  updated_at: string
-  updated_by: string | null
-  is_favorite?: boolean
-  favorite_count?: number
-  [key: string]: any
-}
-
-const PROJECTS_QUERY_KEY = ["projects", "live"] as const
-
 export default function ProjectsLive() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const [fundingDialog, setFundingDialog] = useState<{ open: boolean; projectId: number | null }>({ open: false, projectId: null })
-  const [fundingAmount, setFundingAmount] = useState("")
-  const [selectedPartyId, setSelectedPartyId] = useState("")
-  const [submitting, setSubmitting] = useState(false)
+  const [fundingDialog, setFundingDialog] = useState<{ open: boolean; project_reference_id: string | null }>({ open: false, project_reference_id: null })
   
   // Filter state
   const [filters, setFilters] = useState<FilterState>({
@@ -95,14 +45,6 @@ export default function ProjectsLive() {
 
   // Debounced search
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null)
-
-  // Mock parties data - replace with API call if needed
-  const parties = [
-    { id: 1, name: "Municipal Corporation A" },
-    { id: 2, name: "Bank of India" },
-    { id: 3, name: "HDFC Bank" },
-    { id: 4, name: "State Bank of India" },
-  ]
 
   const buildProjectQueryParams = (currentFilters: FilterState) => {
     const queryParams: any = {
@@ -158,7 +100,7 @@ export default function ProjectsLive() {
     isError,
     error,
   } = useQuery<any, any>({
-    queryKey: [...PROJECTS_QUERY_KEY, { filters }],
+    queryKey: [...LIVE_PROJECTS_QUERY_KEY, { filters }],
     queryFn: () => apiService.get("/projects", buildProjectQueryParams(filters)),
   })
 
@@ -233,48 +175,12 @@ export default function ProjectsLive() {
     navigate(`/main/projects/${projectId}#qa`)
   }
 
-  const handleFundProject = (projectId: number) => {
-    setFundingDialog({ open: true, projectId })
-    setFundingAmount("")
-    setSelectedPartyId("")
-  }
-
-  const handleFundingSubmit = async () => {
-    if (!fundingAmount || !selectedPartyId || !fundingDialog.projectId) {
-      alerts.error("Validation Error", "Please fill in all required fields")
+  const handleFundProject = (project: Project) => {
+    if (!project.project_reference_id) {
+      alerts.error("Validation Error", "Project reference ID not found")
       return
     }
-
-    const amount = parseFloat(fundingAmount)
-    if (isNaN(amount) || amount <= 0) {
-      alerts.error("Validation Error", "Please enter a valid amount")
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const payload = {
-        amount: amount,
-        status: "ACTIVE",
-        project_id: fundingDialog.projectId,
-        party_id: parseInt(selectedPartyId),
-        user_id: 5 // This should come from auth context
-      }
-
-      await apiService.post("/commitments/", payload)
-      alerts.success("Funding Committed", `Successfully committed ₹${amount.toLocaleString()} to the project`)
-      
-      // Close dialog and refresh projects
-      setFundingDialog({ open: false, projectId: null })
-      setFundingAmount("")
-      setSelectedPartyId("")
-      await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
-    } catch (err: any) {
-      const message = err?.response?.data?.message || "Failed to commit funding. Please try again."
-      alerts.error("Error", message)
-    } finally {
-      setSubmitting(false)
-    }
+    setFundingDialog({ open: true, project_reference_id: project.project_reference_id })
   }
 
   // Mutation for adding project to favorites
@@ -282,7 +188,7 @@ export default function ProjectsLive() {
     mutationFn: (data: { project_reference_id: string; organization_id: string; user_id: string; created_by: string }) =>
       apiService.post("/project-favorites/", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
       alerts.success("Success", "Project added to favorites successfully")
     },
     onError: (err: any) => {
@@ -301,7 +207,7 @@ export default function ProjectsLive() {
       return apiService.delete(`/project-favorites/?${params.toString()}`)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
       alerts.success("Success", "Project removed from favorites successfully")
     },
     onError: (err: any) => {
@@ -338,9 +244,9 @@ export default function ProjectsLive() {
     }
   }
 
+
   return (
     <div className="space-y-6">
-      <LoadingOverlay show={submitting} />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -634,7 +540,7 @@ export default function ProjectsLive() {
               <div className="flex space-x-2 pt-4">
                 <Button 
                   className="flex-1" 
-                  onClick={() => handleFundProject(id)}
+                  onClick={() => handleFundProject(p)}
                 >
                   <IndianRupee className="h-4 w-4 mr-2" />
                   Fund Project
@@ -680,58 +586,11 @@ export default function ProjectsLive() {
         </Button>
       </div>
 
-      {/* Funding Dialog */}
-      <Dialog open={fundingDialog.open} onOpenChange={(open) => setFundingDialog({ open, projectId: fundingDialog.projectId })}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Commit Funding</DialogTitle>
-            <DialogDescription>
-              Enter the amount you want to commit to this project and select your organization.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="amount">Amount (₹) *</Label>
-              <Input
-                id="amount"
-                type="number"
-                value={fundingAmount}
-                onChange={(e) => setFundingAmount(e.target.value)}
-                placeholder="Enter amount"
-                min="1"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="party">Organization *</Label>
-              <Select value={selectedPartyId} onValueChange={setSelectedPartyId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  {parties.map((party) => (
-                    <SelectItem key={party.id} value={party.id.toString()}>
-                      {party.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setFundingDialog({ open: false, projectId: null })}
-              disabled={submitting}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleFundingSubmit} disabled={submitting}>
-              {submitting ? <Spinner className="mr-2" size={16} /> : <IndianRupee className="h-4 w-4 mr-2" />}
-              {submitting ? "Committing..." : "Commit Funding"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <FundingCommitmentDialog
+        open={fundingDialog.open}
+        project_reference_id={fundingDialog.project_reference_id}
+        onClose={() => setFundingDialog({ open: false, project_reference_id: null })}
+      />
     </div>
   )
 }
