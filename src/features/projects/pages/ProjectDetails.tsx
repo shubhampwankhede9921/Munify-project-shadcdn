@@ -6,16 +6,26 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { useParams, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import apiService from "@/services/api"
 import { Spinner } from "@/components/ui/spinner"
+import { alerts } from "@/lib/alerts"
 import { 
   MapPin, 
   Calendar, 
   Clock,
-  Star,
   Heart,
   MessageCircle,
   FileText,
@@ -32,7 +42,8 @@ import {
   Play,
   Video,
   Mic,
-  CheckCircle
+  CheckCircle,
+  FilePlus,
 } from "lucide-react"
 
 interface ProjectApiResponse {
@@ -80,10 +91,26 @@ interface ProjectApiResponse {
   }
 }
 
+interface ProjectNote {
+  id: number
+  project_reference_id: string
+  organization_id: string
+  title: string
+  content: string
+  tags: string[]
+  created_by: string
+  created_at: string
+}
+
 export default function ProjectDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
+  const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
+  const [noteTitle, setNoteTitle] = useState("")
+  const [noteContent, setNoteContent] = useState("")
+
+  const queryClient = useQueryClient()
 
   // Fetch project data
   const { data, isLoading, error, isError } = useQuery<ProjectApiResponse>({
@@ -152,6 +179,80 @@ export default function ProjectDetails() {
         return 'secondary'
     }
   }
+
+  // Notes list
+  const {
+    data: notesResponse,
+    isLoading: isNotesLoading,
+    isError: isNotesError,
+    error: notesError,
+  } = useQuery<any, any>({
+    queryKey: ['project-notes', project?.organization_id, project?.project_reference_id],
+    queryFn: async () => {
+      if (!project?.organization_id || !project?.project_reference_id) {
+        return []
+      }
+      const response = await apiService.get('/project-notes/', {
+        organization_id: project.organization_id,
+        project_reference_id: project.project_reference_id,
+      })
+      return response?.data || response
+    },
+    enabled: !!project?.organization_id && !!project?.project_reference_id,
+  })
+
+  const notes: ProjectNote[] = Array.isArray(notesResponse)
+    ? notesResponse
+    : notesResponse?.results || notesResponse?.data || []
+
+  const resetNoteForm = () => {
+    setNoteTitle("")
+    setNoteContent("")
+  }
+
+  const handleCloseNoteDialog = () => {
+    resetNoteForm()
+    setIsNoteDialogOpen(false)
+  }
+
+  const createNoteMutation = useMutation({
+    mutationFn: async () => {
+      if (!noteTitle.trim() || !noteContent.trim()) {
+        throw new Error("Title and content are required")
+      }
+
+      if (!project) {
+        throw new Error("Project details are not available")
+      }
+
+      const payload = {
+        project_reference_id: project.project_reference_id,
+        organization_id: project.organization_id,
+        title: noteTitle.trim(),
+        content: noteContent.trim(),
+        tags: [] as string[],
+        created_by: "shubhamw20",
+        user_id: "shubhamw20",
+      }
+
+      return apiService.post("/project-notes/", payload)
+    },
+    onSuccess: () => {
+      alerts.success("Note Added", "Your note has been added successfully.")
+      resetNoteForm()
+      setIsNoteDialogOpen(false)
+      queryClient.invalidateQueries({
+        queryKey: ['project-notes', project?.organization_id, project?.project_reference_id],
+      })
+    },
+    onError: (err: any) => {
+      const message =
+        err?.message ||
+        err?.response?.data?.message ||
+        "Failed to add note. Please try again."
+      alerts.error("Error", message)
+    },
+  })
 
   // Loading state
   if (isLoading) {
@@ -286,6 +387,61 @@ export default function ProjectDetails() {
 
   return (
     <div className="space-y-6">
+      <Dialog open={isNoteDialogOpen} onOpenChange={(open) => !open ? handleCloseNoteDialog() : setIsNoteDialogOpen(true)}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Add Note</DialogTitle>
+            <DialogDescription>
+              Add a private note for this project. Only you and authorized users will be able to see it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label htmlFor="noteTitle" className="text-sm font-medium">
+                Title
+              </label>
+              <Input
+                id="noteTitle"
+                value={noteTitle}
+                onChange={(e) => setNoteTitle(e.target.value)}
+                placeholder="Enter note title"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="noteContent" className="text-sm font-medium">
+                Content
+              </label>
+              <Textarea
+                id="noteContent"
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                placeholder="Write your note here"
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCloseNoteDialog}
+              disabled={createNoteMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => createNoteMutation.mutate()}
+              disabled={createNoteMutation.isPending}
+            >
+              {createNoteMutation.isPending && <Spinner size={16} className="mr-2" />}
+              Submit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Back Button */}
       <div className="flex items-center justify-between">
         <Button 
@@ -759,10 +915,14 @@ export default function ProjectDetails() {
                   <Heart className="h-4 w-4 mr-2" />
                   Favorite
                 </Button>
-                <Button variant="outline" className="flex-1">
-                  <Star className="h-4 w-4 mr-2" />
-                  Shortlist
-                </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setIsNoteDialogOpen(true)}
+              >
+                <FilePlus className="h-4 w-4 mr-2" />
+                Add Note
+              </Button>
               </div>
               <Separator />
               <div className="space-y-2">
@@ -843,6 +1003,45 @@ export default function ProjectDetails() {
                   View Municipal Details
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Project Notes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Project Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isNotesError && (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {notesError?.message || "Failed to load notes. Please try again."}
+                  </AlertDescription>
+                </Alert>
+              )}
+              {isNotesLoading ? (
+                <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                  <Spinner size={20} className="mr-2" />
+                  Loading notes...
+                </div>
+              ) : !isNotesError && notes.length === 0 ? (
+                <div className="text-sm text-muted-foreground">
+                  No notes have been added for this project yet.
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {notes.map((note) => (
+                    <div key={note.id} className="border rounded-lg p-3 bg-muted/40">
+                      <div className="text-sm font-semibold mb-1 line-clamp-2">
+                        {note.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-3">
+                        {note.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
