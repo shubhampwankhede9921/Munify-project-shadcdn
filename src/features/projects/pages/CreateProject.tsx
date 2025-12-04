@@ -215,7 +215,7 @@ export default function CreateProject() {
     // Format fundraising dates from user input
     const fundraisingStartDate = formData.fundraisingStartDate ? `${formData.fundraisingStartDate}T00:00:00` : undefined
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59` : undefined
-
+    const createdBy = 'shubhamw20'
     return {
       title: formData.projectTitle || 'Untitled Project',
       organization_type: 'municipality',
@@ -243,6 +243,7 @@ export default function CreateProject() {
       state: formData.state || undefined,
       city: formData.city || undefined,
       ward: formData.ward || undefined,
+      created_by: createdBy,
     }
   }
 
@@ -260,7 +261,7 @@ export default function CreateProject() {
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59Z` : undefined
 
     // Get current user email (fallback to contact person email for MVP)
-    const createdBy = 'dev@example.com'
+    const createdBy = 'shubhamw20'
 
     return {
       organization_type: 'municipality',
@@ -273,6 +274,12 @@ export default function CreateProject() {
       description: formData.description,
       start_date: startDate,
       end_date: endDate,
+      state: formData.state || '',
+      city: formData.city || '',
+      ward: formData.ward || '',
+      contact_person_email: formData.contactPersonEmail || '',
+      contact_person_phone: formData.contactPersonPhone || '',
+      contact_person_designation: formData.contactPersonDesignation || '',
       total_project_cost: formData.totalProjectCost || '0.00',
       funding_requirement: formData.fundingRequirement || '0.00',
       already_secured_funds: formData.alreadySecuredFunds || '0.00',
