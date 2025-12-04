@@ -8,9 +8,28 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useParams, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import apiService from "@/services/api"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { alerts } from "@/lib/alerts"
 import { 
   MapPin, 
   Calendar, 
@@ -34,6 +53,37 @@ import {
   Mic,
   CheckCircle
 } from "lucide-react"
+
+interface QuestionAnswer {
+  id: number
+  project_id: string
+  asked_by: string
+  question_text: string
+  status: string
+  category?: string | null
+  priority?: string | null
+  created_at?: string
+  updated_at?: string
+  // The backend may embed answer information either in a nested object or flat fields.
+  answer?: {
+    id?: number
+    reply_text?: string
+    replied_by_user_id?: string | number
+    document_links?: string | null
+    created_at?: string
+  } | null
+  // Fallback flat fields (defensive)
+  reply_text?: string
+  replied_by_user_id?: string | number
+  document_links?: string | null
+}
+
+interface QuestionsListApiResponse {
+  status: string
+  message: string
+  data: QuestionAnswer[]
+  total?: number
+}
 
 interface ProjectApiResponse {
   status: string
@@ -84,6 +134,10 @@ export default function ProjectDetails() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("overview")
+  const queryClient = useQueryClient()
+
+  // TODO: replace with real authenticated user from auth context
+  const currentUserId = "shubhamw20"
 
   // Fetch project data
   const { data, isLoading, error, isError } = useQuery<ProjectApiResponse>({
@@ -95,6 +149,239 @@ export default function ProjectDetails() {
   })
 
   const project = data?.data
+  const projectReferenceId = project?.project_reference_id
+
+  // ---- Q&A: Fetch questions for this project ----
+  // NOTE: This hook MUST be called before any early returns to follow Rules of Hooks
+  const {
+    data: questionsResponse,
+    isLoading: isQuestionsLoading,
+    isError: isQuestionsError,
+    error: questionsError,
+  } = useQuery<QuestionsListApiResponse>({
+    queryKey: ['questions', { project_id: projectReferenceId }],
+    queryFn: async () => {
+      return await apiService.get<QuestionsListApiResponse>('/questions', {
+        project_id: projectReferenceId,
+        skip: 0,
+        limit: 20,
+      })
+    },
+    enabled: !!projectReferenceId,
+  })
+
+  const questions: QuestionAnswer[] = questionsResponse?.data ?? []
+
+  // ---- Q&A: Dialog and form state ----
+  const [isAskDialogOpen, setIsAskDialogOpen] = useState(false)
+  const [isAnswerDialogOpen, setIsAnswerDialogOpen] = useState(false)
+  const [editingQuestion, setEditingQuestion] = useState<QuestionAnswer | null>(null)
+  const [answeringQuestion, setAnsweringQuestion] = useState<QuestionAnswer | null>(null)
+
+  const [questionText, setQuestionText] = useState("")
+  const [questionCategory, setQuestionCategory] = useState<string>("")
+  const [questionPriority, setQuestionPriority] = useState<string>("normal")
+
+  const [answerText, setAnswerText] = useState("")
+  const [answerDocumentLinks, setAnswerDocumentLinks] = useState("")
+
+  const resetQuestionForm = () => {
+    setQuestionText("")
+    setQuestionCategory("")
+    setQuestionPriority("normal")
+    setEditingQuestion(null)
+  }
+
+  const resetAnswerForm = () => {
+    setAnswerText("")
+    setAnswerDocumentLinks("")
+    setAnsweringQuestion(null)
+  }
+
+  const getDisplayAnswer = (qa: QuestionAnswer | null) => {
+    if (!qa) return null
+    if (qa.answer && qa.answer.reply_text) {
+      return qa.answer
+    }
+    if (qa.reply_text) {
+      return {
+        id: qa.answer?.id,
+        reply_text: qa.reply_text,
+        replied_by_user_id: qa.replied_by_user_id,
+        document_links: qa.document_links,
+        created_at: qa.answer?.created_at,
+      }
+    }
+    return null
+  }
+
+  // ---- Q&A: Mutations ----
+  const createQuestionMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectReferenceId) {
+        throw new Error("Missing project reference id")
+      }
+      if (!questionText.trim()) {
+        throw new Error("Question text is required")
+      }
+
+      const payload = {
+        project_id: projectReferenceId,
+        asked_by: currentUserId,
+        question_text: questionText.trim(),
+        category: questionCategory || undefined,
+        priority: questionPriority || "normal",
+        attachments: [] as any[],
+      }
+
+      return await apiService.post('/questions', payload)
+    },
+    onSuccess: () => {
+      alerts.success("Question Submitted", "Your question has been created successfully.")
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to create question. Please try again."
+      alerts.error("Error", message)
+    },
+  })
+
+  const updateQuestionMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectReferenceId || !editingQuestion) {
+        throw new Error("No question selected for update")
+      }
+      if (!questionText.trim()) {
+        throw new Error("Question text is required")
+      }
+
+      const payload: Record<string, any> = {
+        question_text: questionText.trim(),
+        priority: questionPriority || undefined,
+        category: questionCategory || undefined,
+      }
+
+      const endpoint = `/questions/${editingQuestion.id}?project_id=${encodeURIComponent(
+        projectReferenceId,
+      )}`
+
+      return await apiService.put(endpoint, payload)
+    },
+    onSuccess: () => {
+      alerts.success("Question Updated", "Your question has been updated.")
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to update question. This may happen if it already has an answer."
+      alerts.error("Error", message)
+    },
+  })
+
+  const deleteQuestionMutation = useMutation({
+    mutationFn: async (question: QuestionAnswer) => {
+      if (!projectReferenceId) {
+        throw new Error("Missing project reference id")
+      }
+
+      const endpoint = `/questions/${question.id}?project_id=${encodeURIComponent(
+        projectReferenceId,
+      )}&requested_by=${encodeURIComponent(currentUserId)}`
+
+      return await apiService.delete(endpoint)
+    },
+    onSuccess: () => {
+      alerts.success("Question Deleted", "Your question has been deleted.")
+      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to delete question. Only the author can delete, and only if no answer exists."
+      alerts.error("Error", message)
+    },
+  })
+
+  const upsertAnswerMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectReferenceId || !answeringQuestion) {
+        throw new Error("No question selected for answer")
+      }
+      if (!answerText.trim()) {
+        throw new Error("Answer text is required")
+      }
+
+      const existingAnswer = getDisplayAnswer(answeringQuestion)
+      const payload = {
+        reply_text: answerText.trim(),
+        attachments: [] as any[],
+        document_links: answerDocumentLinks.trim() || undefined,
+      }
+
+      const baseEndpoint = `/questions/${answeringQuestion.id}/answer?project_id=${encodeURIComponent(
+        projectReferenceId,
+      )}&replied_by_user_id=${encodeURIComponent(currentUserId)}`
+
+      if (existingAnswer) {
+        return await apiService.put(baseEndpoint, payload)
+      }
+
+      return await apiService.post(baseEndpoint, payload)
+    },
+    onSuccess: () => {
+      alerts.success("Answer Saved", "The answer has been saved successfully.")
+      resetAnswerForm()
+      setIsAnswerDialogOpen(false)
+      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to save answer. Please try again."
+      alerts.error("Error", message)
+    },
+  })
+
+  const deleteAnswerMutation = useMutation({
+    mutationFn: async (question: QuestionAnswer) => {
+      if (!projectReferenceId) {
+        throw new Error("Missing project reference id")
+      }
+
+      const endpoint = `/questions/${question.id}/answer?project_id=${encodeURIComponent(
+        projectReferenceId,
+      )}&replied_by_user_id=${encodeURIComponent(currentUserId)}`
+
+      return await apiService.delete(endpoint)
+    },
+    onSuccess: () => {
+      alerts.success("Answer Deleted", "The answer has been deleted. Question is now open.")
+      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to delete answer. Please try again."
+      alerts.error("Error", message)
+    },
+  })
 
   // Handle URL hash to switch to Q&A tab
   useEffect(() => {
@@ -219,7 +506,7 @@ export default function ProjectDetails() {
   // TODO: When API provides image field, update: const projectImage = project.image_url || fallbackImage
   const projectImage = "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1600&h=900&fit=crop&q=80"
 
-  // Dummy data for Documents, Media, and Q&A (to be replaced with API data later)
+  // Dummy data for Documents and Media (to be replaced with API data later)
   const dummyDocuments = [
     { id: 1, name: "Project Proposal Document", type: "PDF", size: "2.3 MB", uploadedDate: "2025-01-15" },
     { id: 2, name: "Financial Projections & Budget", type: "Excel", size: "1.1 MB", uploadedDate: "2025-01-15" },
@@ -235,53 +522,6 @@ export default function ProjectDetails() {
     { id: 3, type: "video", title: "Municipal Commissioner Interview", duration: "8:45", thumbnail: "https://images.unsplash.com/photo-1581578731548-c6a0c3f2f4c1?w=400&h=200&fit=crop" },
     { id: 4, type: "audio", title: "Stakeholder Meeting Recording", duration: "12:15", thumbnail: null },
     { id: 5, type: "image", title: "Progress Photos", count: 8, thumbnail: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=200&fit=crop" }
-  ]
-
-  const dummyQA = [
-    {
-      id: 1,
-      question: "What is the expected ROI for this project?",
-      answer: "The project is expected to generate 15-20% annual returns through improved water efficiency and reduced operational costs. The financial projections show positive cash flow starting from year 2.",
-      askedBy: "Investment Fund Manager",
-      askedByEmail: "investor@example.com",
-      answeredBy: project.contact_person || "Project Manager",
-      answeredByEmail: project.contact_person_email || "manager@example.com",
-      date: "2 days ago",
-      answeredDate: "1 day ago"
-    },
-    {
-      id: 2,
-      question: "What are the environmental benefits of this project?",
-      answer: "The system will reduce water wastage by 30% and improve monitoring of water quality in real-time. It will also help in early detection of leaks and reduce overall water consumption by 25%.",
-      askedBy: "Environmental Consultant",
-      askedByEmail: "env.consultant@example.com",
-      answeredBy: project.contact_person || "Project Director",
-      answeredByEmail: project.contact_person_email || "director@example.com",
-      date: "1 week ago",
-      answeredDate: "6 days ago"
-    },
-    {
-      id: 3,
-      question: "What is the timeline for project completion?",
-      answer: "The project is scheduled to be completed within 12 months from the start date. Phase 1 (planning and design) will take 3 months, Phase 2 (implementation) will take 7 months, and Phase 3 (testing and commissioning) will take 2 months.",
-      askedBy: "City Planner",
-      askedByEmail: "planner@example.com",
-      answeredBy: project.contact_person || "Project Manager",
-      answeredByEmail: project.contact_person_email || "manager@example.com",
-      date: "3 days ago",
-      answeredDate: "2 days ago"
-    },
-    {
-      id: 4,
-      question: "How will this project impact local employment?",
-      answer: "The project will create 200+ direct jobs during the construction phase and 50+ permanent positions for operations and maintenance. Additionally, it will generate 500+ indirect employment opportunities in related sectors.",
-      askedBy: "Local Business Owner",
-      askedByEmail: "business@example.com",
-      answeredBy: project.contact_person || "Mayor",
-      answeredByEmail: project.contact_person_email || "mayor@example.com",
-      date: "1 week ago",
-      answeredDate: "5 days ago"
-    }
   ]
 
   return (
@@ -695,42 +935,164 @@ export default function ProjectDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {dummyQA.map((qa) => (
-                      <div key={qa.id} className="border rounded-lg p-4 hover:bg-muted/30 transition-colors">
-                        <div className="flex items-start space-x-3">
-                          <Avatar>
-                            <AvatarFallback className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400">
-                              {qa.askedBy.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium mb-2">{qa.question}</div>
-                            <div className="text-sm text-muted-foreground mb-3">
-                              Asked by <span className="font-medium">{qa.askedBy}</span> • {qa.date}
-                            </div>
-                            <div className="bg-muted p-4 rounded-lg border-l-4 border-l-green-500">
-                              <div className="flex items-start space-x-3">
-                                <Avatar>
-                                  <AvatarFallback className="bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400">
-                                    {qa.answeredBy.charAt(0).toUpperCase()}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <CheckCircle className="h-4 w-4 text-green-600" />
-                                    <div className="font-medium text-sm">Answered by {qa.answeredBy}</div>
-                                    <span className="text-xs text-muted-foreground">• {qa.answeredDate}</span>
+                    {isQuestionsError && (
+                      <Alert variant="destructive">
+                        <AlertDescription>
+                          {questionsError?.message || "Failed to load questions. Please try again."}
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {isQuestionsLoading ? (
+                      <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
+                        <Spinner className="mr-2" size={16} />
+                        Loading questions...
+                      </div>
+                    ) : questions.length === 0 ? (
+                      <div className="text-center py-6 text-sm text-muted-foreground">
+                        No questions have been asked for this project yet. Be the first to ask.
+                      </div>
+                    ) : (
+                      questions.map((qa) => {
+                        const answer = getDisplayAnswer(qa)
+                        const canEditOrDeleteQuestion = qa.asked_by === currentUserId && !answer
+                        const hasAnswer = Boolean(answer)
+
+                        return (
+                          <div
+                            key={qa.id}
+                            className="border rounded-lg p-4 hover:bg-muted/30 transition-colors"
+                          >
+                            <div className="flex items-start space-x-3">
+                              <Avatar>
+                                <AvatarFallback className="bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400">
+                                  {qa.asked_by?.charAt(0).toUpperCase?.() || "Q"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <div className="font-medium mb-1">
+                                      {qa.question_text}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground mb-2">
+                                      Asked by{" "}
+                                      <span className="font-medium">{qa.asked_by}</span>
+                                      {qa.priority && (
+                                        <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                                          {qa.priority}
+                                        </span>
+                                      )}
+                                      {qa.category && (
+                                        <span className="ml-2 inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                                          {qa.category}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="text-sm leading-relaxed">{qa.answer}</div>
+                                  <div className="flex items-center gap-2">
+                                    {canEditOrDeleteQuestion && (
+                                      <>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => {
+                                            setEditingQuestion(qa)
+                                            setQuestionText(qa.question_text)
+                                            setQuestionCategory(qa.category || "")
+                                            setQuestionPriority(qa.priority || "normal")
+                                            setIsAskDialogOpen(true)
+                                          }}
+                                        >
+                                          Edit
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => deleteQuestionMutation.mutate(qa)}
+                                          disabled={deleteQuestionMutation.isPending}
+                                        >
+                                          Delete
+                                        </Button>
+                                      </>
+                                    )}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setAnsweringQuestion(qa)
+                                        const existingAnswer = getDisplayAnswer(qa)
+                                        setAnswerText(existingAnswer?.reply_text || "")
+                                        setAnswerDocumentLinks(existingAnswer?.document_links || "")
+                                        setIsAnswerDialogOpen(true)
+                                      }}
+                                    >
+                                      {hasAnswer ? "Edit Answer" : "Answer"}
+                                    </Button>
+                                    {hasAnswer && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => deleteAnswerMutation.mutate(qa)}
+                                        disabled={deleteAnswerMutation.isPending}
+                                      >
+                                        Delete Answer
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
+
+                                {hasAnswer ? (
+                                  <div className="bg-muted p-4 rounded-lg border-l-4 border-l-green-500 mt-2">
+                                    <div className="flex items-start space-x-3">
+                                      <Avatar>
+                                        <AvatarFallback className="bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400">
+                                          {String(
+                                            answer?.replied_by_user_id || "A",
+                                          )
+                                            .charAt(0)
+                                            .toUpperCase()}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <CheckCircle className="h-4 w-4 text-green-600" />
+                                          <div className="font-medium text-sm">
+                                            Answered by{" "}
+                                            {answer?.replied_by_user_id || "Municipality"}
+                                          </div>
+                                        </div>
+                                        <div className="text-sm leading-relaxed">
+                                          {answer?.reply_text}
+                                        </div>
+                                        {answer?.document_links && (
+                                          <div className="mt-2 text-xs text-blue-600 underline break-all">
+                                            {answer.document_links}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 text-xs text-muted-foreground">
+                                    This question has not been answered yet.
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        )
+                      })
+                    )}
                     <div className="pt-4 border-t">
-                      <Button className="w-full" variant="outline">
+                      <Button
+                        className="w-full"
+                        variant="outline"
+                        onClick={() => {
+                          resetQuestionForm()
+                          setIsAskDialogOpen(true)
+                        }}
+                      >
                         <MessageCircle className="h-4 w-4 mr-2" />
                         Ask a Question
                       </Button>
@@ -847,7 +1209,174 @@ export default function ProjectDetails() {
           </Card>
         </div>
       </div>
+
+      {/* Q&A: Ask Question Dialog */}
+      <Dialog
+        open={isAskDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetQuestionForm()
+          }
+          setIsAskDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {editingQuestion ? "Edit Question" : "Ask a Question"}
+            </DialogTitle>
+            <DialogDescription>
+              Submit a question to the municipality about this project.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="question-text">Question *</Label>
+              <Textarea
+                id="question-text"
+                value={questionText}
+                onChange={(e) => setQuestionText(e.target.value)}
+                placeholder="Enter your question about this project"
+                rows={4}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Category</Label>
+                <Select
+                  value={questionCategory}
+                  onValueChange={setQuestionCategory}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="financial">Financial</SelectItem>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="timeline">Timeline</SelectItem>
+                    <SelectItem value="technical">Technical</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Priority</Label>
+                <Select
+                  value={questionPriority}
+                  onValueChange={setQuestionPriority}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                resetQuestionForm()
+                setIsAskDialogOpen(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingQuestion) {
+                  updateQuestionMutation.mutate()
+                } else {
+                  createQuestionMutation.mutate()
+                }
+              }}
+              disabled={
+                createQuestionMutation.isPending || updateQuestionMutation.isPending
+              }
+            >
+              {createQuestionMutation.isPending || updateQuestionMutation.isPending
+                ? "Saving..."
+                : editingQuestion
+                ? "Update Question"
+                : "Submit Question"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Q&A: Answer Dialog */}
+      <Dialog
+        open={isAnswerDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            resetAnswerForm()
+          }
+          setIsAnswerDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {getDisplayAnswer(answeringQuestion)
+                ? "Edit Answer"
+                : "Answer Question"}
+            </DialogTitle>
+            <DialogDescription>
+              Provide a single authoritative answer for this question.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Question</Label>
+              <p className="text-sm text-muted-foreground">
+                {answeringQuestion?.question_text}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="answer-text">Answer *</Label>
+              <Textarea
+                id="answer-text"
+                value={answerText}
+                onChange={(e) => setAnswerText(e.target.value)}
+                placeholder="Enter your answer for this question"
+                rows={4}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="answer-doc-links">Document links (optional)</Label>
+              <Input
+                id="answer-doc-links"
+                value={answerDocumentLinks}
+                onChange={(e) => setAnswerDocumentLinks(e.target.value)}
+                placeholder="https://example.com/answer-details"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                resetAnswerForm()
+                setIsAnswerDialogOpen(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => upsertAnswerMutation.mutate()}
+              disabled={upsertAnswerMutation.isPending}
+            >
+              {upsertAnswerMutation.isPending ? "Saving..." : "Save Answer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-

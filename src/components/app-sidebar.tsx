@@ -91,6 +91,7 @@ const data = {
         { title: "Invitations Management", url: "/main/admin/invitations" },
         { title: "Send Invitation", url: "/main/admin/invitation" },
         { title: "Notifications", url: "/main/admin/notifications" },
+        { title: "Commitments", url: "/main/admin/commitments" },
         { title: "Reports", url: "/main/admin/reports" },
       ],
     },

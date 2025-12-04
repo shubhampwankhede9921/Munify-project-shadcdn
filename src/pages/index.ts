@@ -16,6 +16,8 @@ export { default as AdminProjectReview } from "../features/admin/pages/AdminProj
 export { default as AdminNotifications } from "../features/admin/pages/AdminNotifications"
 export { default as AdminUsers } from "../features/admin/pages/AdminUsers"
 export { default as AdminReports } from "../features/admin/pages/AdminReports"
+export { default as AdminCommitments } from "../features/admin/pages/AdminCommitments"
+export { default as AdminCommitmentDetails } from "../features/admin/pages/AdminCommitmentDetails"
 export { default as Settings } from "../features/settings/pages/Settings"
 export { default as NotFound } from "./NotFound"
 export { default as Landing } from "./Landing"
