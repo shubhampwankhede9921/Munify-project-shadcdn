@@ -21,18 +21,9 @@ import { useEffect, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import apiService from "@/services/api"
 import { Spinner } from "@/components/ui/spinner"
-import { alerts } from "@/lib/alerts"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+
 import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+
 import {
   Select,
   SelectContent,
@@ -163,8 +154,6 @@ export default function ProjectDetails() {
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
-
-  const queryClient = useQueryClient()
 
   // Fetch project data
   const { data, isLoading, error, isError } = useQuery<ProjectApiResponse>({

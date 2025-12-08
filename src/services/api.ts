@@ -1,4 +1,5 @@
 import axios from "axios"
+import { tokenStorage } from "@/lib/session-storage"
 // Read env vars once at module load (Vite injects these at build time)
 const { VITE_PERDIX_JWT } = import.meta.env as { VITE_PERDIX_JWT?: string }
 
@@ -14,6 +15,40 @@ const api = axios.create({
     'Accept': 'application/json',
   },
 })
+
+// Request interceptor: Automatically attach JWT token to all requests
+api.interceptors.request.use(
+  (config) => {
+    const token = tokenStorage.get()
+    if (token) {
+      // Add Authorization header with JWT token
+      // Format: "Authorization: JWT <token>" as per your API requirement
+      config.headers.Authorization = `JWT ${token}`
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
+// Response interceptor: Handle 401 Unauthorized (token expired/invalid)
+api.interceptors.response.use(
+  (response) => {
+    return response
+  },
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid - clear auth data
+      tokenStorage.remove()
+      // Optionally redirect to login page
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
 
 // Generic API functions
 export const apiService = {
@@ -79,6 +114,9 @@ export const perdixApiService = {
     return response.data
   }
 }
+
+// Export the axios instance for custom calls that need direct access
+export { api }
 
 // Export the base API service for custom calls
 export default apiService
