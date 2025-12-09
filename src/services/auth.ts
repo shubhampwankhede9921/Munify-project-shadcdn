@@ -56,4 +56,20 @@ export async function getToken(credentials: LoginCredentials): Promise<any> {
   })
 }
 
-
+export async function getUserAccount(token?: string): Promise<any> {
+  // If token is provided explicitly, use it directly (useful during login flow)
+  // Otherwise, the axios interceptor will automatically attach token from sessionStorage
+  if (token) {
+    // Import axios instance directly to set header explicitly
+    const { api } = await import('./api')
+    const response = await api.get("/users/account", {
+      headers: {
+        Authorization: `JWT ${token}`
+      }
+    })
+    return response.data
+  }
+  
+  // Use apiService - interceptor will attach token from storage
+  return await apiService.get("/users/account")
+}

@@ -16,6 +16,7 @@ import {
   BarChart3,
   Activity
 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 
 export default function Dashboard() {
   // Calculate statistics
@@ -29,6 +30,9 @@ export default function Dashboard() {
   
   // Recent projects (last 3)
   const recentProjects = mockProjects.slice(0, 3)
+
+  const { user } = useAuth()
+  console.log(user)
   
   // Top performing projects
   const topProjects = mockProjects

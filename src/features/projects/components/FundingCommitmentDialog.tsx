@@ -246,6 +246,32 @@ export function FundingCommitmentDialog({
     },
   })
 
+  const withdrawCommitmentMutation = useMutation({
+    mutationFn: async () => {
+      if (!commitmentId) {
+        throw new Error("No commitment found to withdraw")
+      }
+
+      return apiService.post(`/commitments/${commitmentId}/withdraw`,{updated_by: currentUserId})
+    },
+    onSuccess: () => {
+      alerts.success("Commitment Withdrawn", "Your commitment has been withdrawn successfully.")
+      resetForm()
+      onClose()
+      // Refresh lists and project details
+      queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: ["project", "by-reference", project_reference_id] })
+    },
+    onError: (error: any) => {
+      const message =
+        error?.response?.data?.message ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        "Failed to withdraw commitment. Please try again."
+      alerts.error("Error", message)
+    },
+  })
+
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && handleClose()}>
       <DialogContent className="w-[95vw] max-w-[850px] max-h-[90vh] flex flex-col p-0 gap-0">
@@ -395,31 +421,58 @@ export function FundingCommitmentDialog({
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t flex-shrink-0 bg-muted/30">
-          <Button
-            variant="outline"
-            onClick={handleClose}
-            disabled={commitFundingMutation.isPending}
-            className="h-9 px-6"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={() => commitFundingMutation.mutate()}
-            disabled={commitFundingMutation.isPending || !isWindowOpen || isLoadingProject || !project}
-            className="h-9 px-6"
-          >
-            {commitFundingMutation.isPending ? (
-              <Spinner className="mr-2" size={16} />
-            ) : (
-              <IndianRupee className="h-4 w-4 mr-2" />
+        <DialogFooter className="px-6 py-4 border-t flex-shrink-0 bg-muted/30 gap-2 sm:justify-between">
+          <div className="flex items-center gap-2">
+            {commitmentId && (
+              <Button
+                variant="destructive"
+                type="button"
+                onClick={() => withdrawCommitmentMutation.mutate()}
+                disabled={
+                  withdrawCommitmentMutation.isPending ||
+                  commitFundingMutation.isPending ||
+                  isLoadingProject
+                }
+                className="h-9 px-4"
+              >
+                {withdrawCommitmentMutation.isPending ? "Withdrawing..." : "Withdraw Commitment"}
+              </Button>
             )}
-            {commitFundingMutation.isPending
-              ? "Saving..."
-              : commitmentId
-              ? "Update Commitment"
-              : "Commit Funding"}
-          </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleClose}
+              disabled={commitFundingMutation.isPending || withdrawCommitmentMutation.isPending}
+              className="h-9 px-6"
+              type="button"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => commitFundingMutation.mutate()}
+              disabled={
+                commitFundingMutation.isPending ||
+                withdrawCommitmentMutation.isPending ||
+                !isWindowOpen ||
+                isLoadingProject ||
+                !project
+              }
+              className="h-9 px-6"
+            >
+              {commitFundingMutation.isPending ? (
+                <Spinner className="mr-2" size={16} />
+              ) : (
+                <IndianRupee className="h-4 w-4 mr-2" />
+              )}
+              {commitFundingMutation.isPending
+                ? "Saving..."
+                : commitmentId
+                ? "Update Commitment"
+                : "Commit Funding"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

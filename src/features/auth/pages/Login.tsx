@@ -7,12 +7,15 @@ import { Building2, Mail, Lock, Eye, EyeOff } from "lucide-react"
 import { useState } from "react"
 import { LoadingOverlay, Spinner } from "@/components/ui/spinner"
 import { alerts } from "@/lib/alerts"
-import { getToken } from "@/services/auth"
+import { getToken, getUserAccount } from "@/services/auth"
+import { useAuth } from "@/hooks/use-auth"
 import { Link, useNavigate } from "react-router-dom"
 import Copyright from "@/components/Copyright"
+import type { LoginResponse } from "@/types/auth"
 
 export default function Login() {
   const navigate = useNavigate()
+  const { login } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -43,7 +46,8 @@ export default function Login() {
     }
     setLoading(true)
     try {
-      const res = await getToken({ ...form, macaddress: null, imeiNumber: null })
+      // Step 1: Login and get JWT token
+      const res: LoginResponse = await getToken({ ...form, macaddress: null, imeiNumber: null })
       
       // Handle new response structure: { authData: { access_token, mfa } }
       if (!res?.authData?.access_token) {
@@ -51,10 +55,20 @@ export default function Login() {
         return
       }
 
+      const token = res.authData.access_token
+
+      // Step 2: Fetch user account details using the JWT token
+      // Pass token explicitly since it's not stored yet
+      const userAccount = await getUserAccount(token)
+
+      // Step 3: Store token and user data via auth context
+      // This will also store in sessionStorage automatically
+      login(token, userAccount)
+
       alerts.success("Login Successful", "Welcome back!")
       navigate("/main")
     } catch (err: any) {
-      let msg = err?.response?.data?.message || "Login failed"
+      let msg = err?.response?.data?.message || err?.message || "Login failed"
       if (typeof msg === "string" && msg.startsWith("{")) {
         try { msg = JSON.parse(msg).message || msg } catch {}
       }
