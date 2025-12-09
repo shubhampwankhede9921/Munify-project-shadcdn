@@ -67,6 +67,7 @@ const data = {
 			{ title: "All Municipalities", url: "/main/municipalities" },
 			{ title: "Credit Ratings", url: "/main/municipal/ratings" },
 			{ title: "Financial Analysis", url: "/main/municipal/analysis" },
+			{ title: "Q&A Management", url: "/main/municipal/qa" },
 	      ],
     },
     {
