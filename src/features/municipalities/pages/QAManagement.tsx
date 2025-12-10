@@ -21,37 +21,15 @@ import {
 import { MessageCircle, CheckCircle, Clock, ArrowUpDown, MessageSquare, MoreHorizontal, Edit, Trash2 } from "lucide-react"
 import apiService from "@/services/api"
 import { alerts } from "@/lib/alerts"
-
-// Payload interface for question data
-interface QuestionAnswer {
-  id: number
-  project_id: string
-  asked_by: string
-  question_text: string
-  status: string
-  category?: string | null
-  priority?: string | null
-  created_at?: string
-  updated_at?: string
-  answer?: {
-    id?: number
-    reply_text?: string
-    replied_by_user_id?: string | number
-    document_links?: string | null
-    created_at?: string
-  } | null
-  reply_text?: string
-  replied_by_user_id?: string | number
-  document_links?: string | null
-}
+import { useAuth } from "@/contexts/auth-context"
 
 // UI Question interface
 interface Question {
   id: number
   projectId: string
+  projectReferenceId: string
   question: string
   askedBy: string
-  organization: string
   category: string
   askedDate: string
   answeredDate?: string
@@ -61,28 +39,8 @@ interface Question {
   status: 'open' | 'answered'
 }
 
-// Hardcoded organization ID
-const ORGANIZATION_ID = "PMC" // Pune Municipal Corporation
-
-// TODO: Replace with real authenticated user from auth context
-const CURRENT_USER_ID = "user123"
-
-// Map organization ID to display name
-const getOrganizationName = (orgId: string): string => {
-  const orgMap: Record<string, string> = {
-    "PMC": "Pune Municipal Corporation",
-    "MMC": "Mumbai Municipal Corporation",
-    "DMC": "Delhi Municipal Corporation",
-    "BMC": "Bangalore Municipal Corporation",
-    "CMC": "Chennai Municipal Corporation",
-    "KMC": "Kolkata Municipal Corporation",
-    "HMC": "Hyderabad Municipal Corporation",
-    "AMC": "Ahmedabad Municipal Corporation",
-  }
-  return orgMap[orgId] || orgId
-}
-
 export default function QAManagement() {
+  const { user, isLoading: isAuthLoading } = useAuth()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'all' | 'open' | 'answered'>('all')
   
@@ -97,10 +55,16 @@ export default function QAManagement() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [deletingQuestion, setDeletingQuestion] = useState<Question | null>(null)
 
+  const ORGANIZATION_ID = user?.data?.userBranches[1]?.branchId // Pune Municipal Corporation
+  const CURRENT_USER_ID = user?.data?.login
+  
   // Fetch questions from API
   const { data: questionsResponse, isLoading, error, isError } = useQuery({
     queryKey: ['questions', { organization_id: ORGANIZATION_ID }],
     queryFn: async () => {
+      if (!ORGANIZATION_ID) {
+        throw new Error("Organization ID is required")
+      }
       try {
         return await apiService.get('/questions', {
           organization_id: ORGANIZATION_ID,
@@ -116,6 +80,7 @@ export default function QAManagement() {
         throw err
       }
     },
+    enabled: !isAuthLoading && !!ORGANIZATION_ID, // Only run query when auth is loaded and ORGANIZATION_ID exists
   })
 
   // Map API response to UI Question format
@@ -127,16 +92,16 @@ export default function QAManagement() {
     
     if (!questionsData || questionsData.length === 0) return []
     
-    return questionsData.map((qa: QuestionAnswer) => {
+    return questionsData.map((qa: any) => {
       const hasAnswer = qa.answer?.reply_text || qa.reply_text
       const status: 'open' | 'answered' = hasAnswer ? 'answered' : 'open'
       
       return {
         id: qa.id,
         projectId: qa.project_id,
+        projectReferenceId: qa.project_reference_id || qa.project_id,
         question: qa.question_text,
         askedBy: qa.asked_by,
-        organization: getOrganizationName(ORGANIZATION_ID),
         category: qa.category || 'General',
         askedDate: qa.created_at || '',
         answeredDate: qa.answer?.created_at || (qa.updated_at && hasAnswer ? qa.updated_at : undefined),
@@ -325,16 +290,36 @@ export default function QAManagement() {
       enableSorting: false,
     },
     {
-      accessorKey: 'organization',
-      header: () => (
-        <span className="text-sm font-semibold text-foreground">Organization</span>
+      accessorKey: 'projectReferenceId',
+      header: ({ column }) => (
+        <button 
+          className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-foreground transition-colors" 
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Project Reference ID
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+        </button>
       ),
       cell: ({ row }) => (
-        <div className="min-w-[200px]">
-          <div className="font-medium text-foreground">{row.original.organization}</div>
-          <div className="text-sm text-muted-foreground mt-0.5">
-            Asked by {row.original.askedBy}
-          </div>
+        <div className="min-w-[150px]">
+          <span className="font-medium text-foreground">{row.original.projectReferenceId}</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'askedBy',
+      header: ({ column }) => (
+        <button 
+          className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-foreground transition-colors" 
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Asked By
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
+        </button>
+      ),
+      cell: ({ row }) => (
+        <div className="min-w-[150px]">
+          <span className="font-medium text-foreground">{row.original.askedBy}</span>
         </div>
       ),
     },
@@ -477,14 +462,14 @@ export default function QAManagement() {
       )}
 
       {/* Loading State */}
-      {isLoading && (
+      {(isAuthLoading || isLoading) && (
         <div className="flex items-center justify-center py-12">
           <div className="text-muted-foreground">Loading questions...</div>
         </div>
       )}
 
       {/* Stats Overview */}
-      {!isLoading && (
+      {!isAuthLoading && !isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="hover:shadow-lg transition-all duration-300 hover:scale-[1.02] cursor-pointer border-l-4 border-l-blue-500">
             <CardContent className="p-6">
@@ -529,7 +514,7 @@ export default function QAManagement() {
       )}
 
       {/* Tabs for All Questions, Open Questions, and Answered Questions */}
-      {!isLoading && (
+      {!isAuthLoading && !isLoading && (
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'all' | 'open' | 'answered')} className="w-full">
         <div className="border-b border-border">
           <TabsList className="inline-flex h-11 items-center justify-start rounded-none bg-transparent p-0 w-auto gap-1">

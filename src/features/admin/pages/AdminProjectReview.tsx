@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import apiService from '@/services/api'
 import { alerts } from '@/lib/alerts'
+import { useAuth } from "@/contexts/auth-context"
 
 interface Project {
   id: number
@@ -61,7 +62,8 @@ export default function AdminProjectReview() {
   const [remarks, setRemarks] = useState("")
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const [showRejectConfirm, setShowRejectConfirm] = useState(false)
-
+const { user } = useAuth()
+console.log(user?.data?.login);
   // Fetch project details
   const { data: project, isLoading, error, isError } = useQuery({
     queryKey: ['project', id],
@@ -76,7 +78,7 @@ export default function AdminProjectReview() {
   const approveProjectMutation = useMutation({
     mutationFn: ({ projectId, admin_notes }: { projectId: number; admin_notes?: string }) => {
       return apiService.post(`/projects/${projectId}/approve`, { 
-        approved_by: "shubhamw20",
+        approved_by: user?.data?.login,
         admin_notes: admin_notes || '' 
       })
     },
@@ -97,7 +99,7 @@ export default function AdminProjectReview() {
     mutationFn: ({ projectId, reject_note }: { projectId: number; reject_note: string }) => {
       return apiService.post(`/projects/${projectId}/reject`, { 
         reject_note: reject_note,
-        approved_by: "shubhamw20"
+        approved_by: user?.data?.login
       })
     },
     onSuccess: () => {

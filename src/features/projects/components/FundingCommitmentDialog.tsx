@@ -12,6 +12,7 @@ import { IndianRupee } from "lucide-react"
 import { alerts } from "@/lib/alerts"
 import { apiService } from "@/services/api"
 import { type Project, LIVE_PROJECTS_QUERY_KEY } from "@/features/projects/types"
+import { useAuth } from "@/contexts/auth-context"
 
 interface FundingCommitmentDialogProps {
   open: boolean
@@ -63,7 +64,8 @@ export function FundingCommitmentDialog({
   const [commitmentId, setCommitmentId] = useState<number | null>(null)
 
   // TODO: replace with real authenticated user from auth context
-  const currentUserId = "shubhamw20"
+  const { user } = useAuth()
+  const currentUserId = user?.data?.login
 
   // Fetch project details by project_reference_id
   const {

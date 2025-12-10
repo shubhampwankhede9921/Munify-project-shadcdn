@@ -13,14 +13,10 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { SearchForm } from "./search-form"
+import { useAuth } from "@/contexts/auth-context"
 
 // This is sample data.
 const data = {
-  user: {
-    name: "Shubham Wankhede",
-    email: "shubhamwan10@gmail.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   teams: [
     {
       name: "Munify",
@@ -60,15 +56,15 @@ const data = {
       ],
     },
     {
-	      title: "Municipalities",
-	      url: "/main/municipalities",
-	      icon: Building2,
-	      items: [
-			{ title: "All Municipalities", url: "/main/municipalities" },
-			{ title: "Credit Ratings", url: "/main/municipal/ratings" },
-			{ title: "Financial Analysis", url: "/main/municipal/analysis" },
-			{ title: "Q&A Management", url: "/main/municipal/qa" },
-	      ],
+      title: "Municipalities",
+      url: "/main/municipalities",
+      icon: Building2,
+      items: [
+        { title: "All Municipalities", url: "/main/municipalities" },
+        { title: "Credit Ratings", url: "/main/municipal/ratings" },
+        { title: "Financial Analysis", url: "/main/municipal/analysis" },
+        { title: "Q&A Management", url: "/main/municipal/qa" },
+      ],
     },
     {
       title: "Master",
@@ -87,7 +83,7 @@ const data = {
         { title: "Project Management", url: "/main/admin/projects" },
         { title: "Create Project", url: "/main/admin/projects/create" },
         { title: "My Drafts", url: "/main/admin/projects/drafts" },
-        { title: "Validate Projects", url: "/main/admin/projects/validate" },
+        // { title: "Validate Projects", url: "/main/admin/projects/validate" },
         { title: "User Management", url: "/main/admin/users" },
         { title: "Invitations Management", url: "/main/admin/invitations" },
         { title: "Send Invitation", url: "/main/admin/invitation" },
@@ -126,12 +122,20 @@ const data = {
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [query, setQuery] = React.useState("")
+  const { user } = useAuth()
   const q = query.trim().toLowerCase()
   const filteredNavMain = data.navMain.map((section) => ({
     ...section,
     items: section.items?.filter((i) => i.title.toLowerCase().includes(q)),
   }))
   const filteredProjects = data.projects.filter((p) => p.name.toLowerCase().includes(q))
+
+  // Extract user data from auth context
+  const userData = {
+    name: user?.data?.login,
+    email: user?.data?.email,
+    avatar: "/avatars/shadcn.jpg",
+  }
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -149,7 +153,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavProjects projects={filteredProjects} />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

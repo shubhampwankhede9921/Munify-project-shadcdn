@@ -72,7 +72,7 @@ export const router = createBrowserRouter([
       { path: "municipal/analysis", element: <MunicipalAnalysis /> },
       { path: "municipal/qa", element: <QAManagement /> },
       { path: "admin/projects", element: <AdminProjects /> },
-      { path: "admin/projects/validate", element: <AdminProjects /> },
+      // { path: "admin/projects/validate", element: <AdminProjects /> },
       { path: "admin/projects/validate/:id", element: <AdminProjectReview /> },
       
       { path: "admin/projects/create", element: <CreateProject /> },

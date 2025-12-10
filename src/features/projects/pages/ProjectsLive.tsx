@@ -25,10 +25,11 @@ import {
   X
 } from "lucide-react"
 
+import { useAuth } from "@/contexts/auth-context"
 export default function ProjectsLive() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-
+  const { user } = useAuth()
   const [fundingDialog, setFundingDialog] = useState<{ open: boolean; project_reference_id: string | null }>({ open: false, project_reference_id: null })
   
   // Filter state
@@ -52,7 +53,7 @@ export default function ProjectsLive() {
       limit: 10,
       // Backend expects lowercase status, default to active list
       status: "active",
-      user_id: "shubhamw20",
+      user_id: user?.data?.login,
     }
 
     // Add search parameter
@@ -224,7 +225,7 @@ export default function ProjectsLive() {
       return
     }
 
-    const userId = "shubhamw20" // TODO: Get from auth context
+    const userId = user?.data?.login // TODO: Get from auth context
     const isFavorited = Boolean(project.is_favorite)
 
     if (isFavorited) {

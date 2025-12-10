@@ -23,6 +23,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import apiService from "@/services/api"
 import { alerts } from "@/lib/alerts"
+import { useAuth } from "@/contexts/auth-context"
 
 type Commitment = any
 
@@ -36,8 +37,10 @@ export default function AdminCommitmentDetails() {
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
   const [remarks, setRemarks] = useState('')
 
+  const { user } = useAuth();
+  
   // TODO: replace with real authenticated admin user
-  const currentAdminId = "shubhamw20"
+  const currentAdminId = user?.data?.login
 
   // Query for commitments by project using summary API:
   // GET /commitments/commitment-details/by-projectt?project_reference_id={id}&skip=0
