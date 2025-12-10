@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, Award, Building2 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 
 const mockRatings = [
   { name: "Mumbai Municipal Corporation", state: "Maharashtra", rating: "AA+" },
@@ -10,7 +11,11 @@ const mockRatings = [
   { name: "Bangalore City Corporation", state: "Karnataka", rating: "AA" },
 ]
 
+
+
 export default function MunicipalRatings() {
+  const { user } = useAuth();
+  console.log(user?.data?.login);
   return (
     <div className="space-y-6">
       <div>
