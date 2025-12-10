@@ -57,9 +57,9 @@ export default function Login() {
 
       const token = res.authData.access_token
 
-      // Step 2: Fetch user account details using the JWT token
-      // Pass token explicitly since it's not stored yet
-      const userAccount = await getUserAccount(token)
+      // Step 2: Fetch user account details using the JWT token and username
+      // Endpoint: /users/perdix/{username}
+      const userAccount = await getUserAccount(token, form.username)
 
       // Step 3: Store token and user data via auth context
       // This will also store in sessionStorage automatically

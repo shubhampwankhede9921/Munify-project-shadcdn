@@ -37,18 +37,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(storedUser)
           setIsAuthenticated(true)
         } else if (storedToken && !storedUser) {
-          // Token exists but user data is missing - fetch it
-          try {
-            const userData = await getUserAccount(storedToken)
-            userStorage.set(userData)
-            setUser(userData)
-            setToken(storedToken)
-            setIsAuthenticated(true)
-          } catch (error) {
-            // Token might be invalid - clear it
-            clearAuthData()
-            setIsAuthenticated(false)
-          }
+          // Token exists but user data is missing - cannot fetch without username
+          // Clear token and require re-login
+          clearAuthData()
+          setIsAuthenticated(false)
         } else {
           setIsAuthenticated(false)
         }
@@ -86,18 +78,29 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const refreshUser = async () => {
     const currentToken = tokenStorage.get()
-    if (!currentToken) {
+    const currentUser = userStorage.get()
+    
+    if (!currentToken || !currentUser) {
+      logout()
+      return
+    }
+
+    // Extract username from stored user data
+    // User data might have: userId, username, login, or user_id fields
+    const username = currentUser?.userId || currentUser?.username || currentUser?.login || currentUser?.user_id
+    
+    if (!username) {
+      console.error('Cannot refresh user: username not found in user data')
       logout()
       return
     }
 
     try {
-      const userData = await getUserAccount(currentToken)
+      const userData = await getUserAccount(currentToken, username)
       userStorage.set(userData)
       setUser(userData)
     } catch (error: any) {
       console.error('Failed to refresh user data:', error)
-      // If refresh fails, logout user
       logout()
       alerts.error('Session Expired', 'Please login again')
     }
