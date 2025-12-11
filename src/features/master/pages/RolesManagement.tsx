@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DataTable, type ColumnDef } from '@/components/data-table/data-table'
-import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import apiService from '@/services/api'
 import { alerts } from '@/lib/alerts'
@@ -28,13 +27,13 @@ export default function RolesManagement() {
   
   // Mutation for creating role
   const createRoleMutation = useMutation({
-    mutationFn: (data: { roleName: string; roleAccessLevel: number }) => 
-      apiService.post('/user-roles/roles', data),
+    mutationFn: (data: { roleName: string }) => 
+      apiService.post('/user-roles/roles', { ...data, roleAccessLevel: 1 }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
       alerts.success("Success", "Role created successfully")
       setIsCreateDialogOpen(false)
-      setFormData({ roleName: '', roleAccessLevel: 1 })
+      setFormData({ roleName: '' })
     },
     onError: () => {
       alerts.error("Error", "Failed to create role. Please try again.")
@@ -43,14 +42,14 @@ export default function RolesManagement() {
   
   // Mutation for updating role
   const updateRoleMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { roleName: string; roleAccessLevel: number } }) => 
-      apiService.put(`/user-roles/roles/${id}`, data),
+    mutationFn: ({ id, data }: { id: number; data: { roleName: string } }) => 
+      apiService.put(`/user-roles/roles/${id}`, { ...data, roleAccessLevel: 1 }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roles'] })
       alerts.success("Success", "Role updated successfully")
       setIsEditDialogOpen(false)
       setEditingRole(null)
-      setFormData({ roleName: '', roleAccessLevel: 1 })
+      setFormData({ roleName: '' })
     },
     onError: () => {
       alerts.error("Error", "Failed to update role. Please try again.")
@@ -62,8 +61,7 @@ export default function RolesManagement() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [formData, setFormData] = useState({
-    roleName: '',
-    roleAccessLevel: 1
+    roleName: ''
   })
 
   const handleCreateRole = async () => {
@@ -92,17 +90,9 @@ export default function RolesManagement() {
   const openEditDialog = (role: Role) => {
     setEditingRole(role)
     setFormData({
-      roleName: role.name,
-      roleAccessLevel: role.accessLevel
+      roleName: role.name
     })
     setIsEditDialogOpen(true)
-  }
-
-  const getAccessLevelBadgeVariant = (level: number) => {
-    if (level >= 15) return 'destructive'
-    if (level >= 10) return 'default'
-    if (level >= 5) return 'secondary'
-    return 'outline'
   }
 
   const columns: ColumnDef<Role, any>[] = [
@@ -116,15 +106,6 @@ export default function RolesManagement() {
       accessorKey: 'name',
       header: 'Role Name',
       cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
-    },
-    {
-      accessorKey: 'accessLevel',
-      header: 'Access Level',
-      cell: ({ row }) => (
-        <Badge variant={getAccessLevelBadgeVariant(row.original.accessLevel)}>
-          Level {row.original.accessLevel}
-        </Badge>
-      ),
     },
     {
       id: 'actions',
@@ -151,7 +132,7 @@ export default function RolesManagement() {
           <DialogHeader>
             <DialogTitle>Create New Role</DialogTitle>
             <DialogDescription>
-              Create a new role with specific access level
+              Create a new role
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -165,20 +146,6 @@ export default function RolesManagement() {
                 onChange={(e) => setFormData({ ...formData, roleName: e.target.value })}
                 className="col-span-3"
                 placeholder="Enter role name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="roleAccessLevel" className="text-right">
-                Access Level
-              </Label>
-              <Input
-                id="roleAccessLevel"
-                type="number"
-                min="1"
-                max="20"
-                value={formData.roleAccessLevel}
-                onChange={(e) => setFormData({ ...formData, roleAccessLevel: parseInt(e.target.value) || 1 })}
-                className="col-span-3"
               />
             </div>
           </div>
@@ -218,14 +185,14 @@ export default function RolesManagement() {
           ) : (
             <DataTable<Role, any>
               title="Roles"
-              description="Manage system roles and access levels"
+              description="Manage system roles"
               columns={columns}
               data={roles}
               actions={
                 <div className="flex items-center gap-2">
                   <Button size="sm" onClick={() => {
                     setEditingRole(null)
-                    setFormData({ roleName: '', roleAccessLevel: 1 })
+                    setFormData({ roleName: '' })
                     setIsEditDialogOpen(false)
                     setIsCreateDialogOpen(true)
                   }}>
@@ -267,20 +234,6 @@ export default function RolesManagement() {
                 onChange={(e) => setFormData({ ...formData, roleName: e.target.value })}
                 className="col-span-3"
                 placeholder="Enter role name"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="editRoleAccessLevel" className="text-right">
-                Access Level
-              </Label>
-              <Input
-                id="editRoleAccessLevel"
-                type="number"
-                min="1"
-                max="20"
-                value={formData.roleAccessLevel}
-                onChange={(e) => setFormData({ ...formData, roleAccessLevel: parseInt(e.target.value) || 1 })}
-                className="col-span-3"
               />
             </div>
           </div>
