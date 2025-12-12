@@ -1,458 +1,285 @@
+import { useQuery } from "@tanstack/react-query"
+import { useMemo } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Spinner } from "@/components/ui/spinner"
+import apiService from "@/services/api"
+import { alerts } from "@/lib/alerts"
 import { 
-  Search, 
-  Filter, 
   MapPin, 
   Calendar, 
   Star,
   Eye,
   Heart,
-  TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  IndianRupee
+  AlertCircle
 } from "lucide-react"
 
-const mockMyProjects = {
-  funded: [
-    {
-      id: 1,
-      name: "Smart Water Management System",
-      municipality: "Mumbai Municipal Corporation",
-      state: "Maharashtra",
-      image: "/api/placeholder/400/200",
-      myInvestment: 5000000,
-      totalFunding: 50000000,
-      currentFunding: 35000000,
-      progress: 70,
-      status: "Live",
-      category: "Infrastructure",
-      investmentDate: "2024-01-15",
-      expectedROI: 18.5,
-      currentValue: 5925000
-    },
-    {
-      id: 2,
-      name: "Solar Street Lighting Project",
-      municipality: "Delhi Municipal Corporation",
-      state: "Delhi",
-      image: "/api/placeholder/400/200",
-      myInvestment: 2000000,
-      totalFunding: 25000000,
-      currentFunding: 18000000,
-      progress: 72,
-      status: "Live",
-      category: "Renewable Energy",
-      investmentDate: "2024-02-01",
-      expectedROI: 22.3,
-      currentValue: 2446000
-    }
-  ],
-  shortlisted: [
-    {
-      id: 3,
-      name: "Waste Management Modernization",
-      municipality: "Bangalore City Corporation",
-      state: "Karnataka",
-      image: "/api/placeholder/400/200",
-      fundRequired: 75000000,
-      currentFunding: 45000000,
-      progress: 60,
-      status: "Live",
-      category: "Environment",
-      shortlistedDate: "2024-02-10",
-      daysLeft: 60
-    },
-    {
-      id: 4,
-      name: "Digital Governance Platform",
-      municipality: "Chennai Corporation",
-      state: "Tamil Nadu",
-      image: "/api/placeholder/400/200",
-      fundRequired: 30000000,
-      currentFunding: 30000000,
-      progress: 100,
-      status: "Completed",
-      category: "Technology",
-      shortlistedDate: "2023-11-01",
-      daysLeft: 0
-    }
-  ],
-  completed: [
-    {
-      id: 5,
-      name: "Green Energy Initiative",
-      municipality: "Pune Municipal Corporation",
-      state: "Maharashtra",
-      image: "/api/placeholder/400/200",
-      myInvestment: 3000000,
-      totalFunding: 50000000,
-      finalROI: 25.8,
-      category: "Renewable Energy",
-      completionDate: "2023-12-15",
-      finalValue: 3774000,
-      profit: 774000
-    }
-  ]
+// Helper function to normalize API response
+const normalizeProjects = (data: any): any[] => {
+  return data?.data || []
+}
+
+// Helper function to format currency
+const formatCurrency = (amount: string | number): number => {
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
+  return isNaN(numAmount) ? 0 : numAmount
+}
+
+// Helper function to get progress percentage
+const getProgress = (fundingPercentage: string | null | number): number => {
+  if (fundingPercentage === null || fundingPercentage === undefined) return 100
+  const percentage = typeof fundingPercentage === 'string' ? parseFloat(fundingPercentage) : fundingPercentage
+  return isNaN(percentage) ? 100 : Math.min(100, Math.max(0, percentage))
+}
+
+// Helper function to format dates
+const formatDate = (dateString: string | null | undefined): string => {
+  if (!dateString) return 'N/A'
+  try {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  } catch {
+    return dateString
+  }
 }
 
 export default function MyProjects() {
+  const navigate = useNavigate()
+  const userId = "shubhamw20" // TODO: Replace with auth user id
+
+  // Fetch funded projects by user
+  const { data, isLoading, error, isError } = useQuery<any>({
+    queryKey: ['projects', 'funded-by-user', userId],
+    queryFn: async () => {
+      try {
+        const response = await apiService.get<any>('/projects/funded-by-user', {
+          committed_by: userId,
+          skip: 0,
+          limit: 100
+        })
+        return response
+      } catch (err: any) {
+        const errorMessage =
+          err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          err?.message ||
+          'Failed to fetch funded projects'
+        alerts.error('Error', errorMessage)
+        throw err
+      }
+    },
+  })
+
+  // Normalize API response to array
+  const fundedProjects = useMemo(() => {
+    return normalizeProjects(data)
+  }, [data])
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">My Projects</h1>
-          <p className="text-muted-foreground">
-            Track your investments and shortlisted projects
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline">
-            <Filter className="h-4 w-4 mr-2" />
-            Filter
-          </Button>
-          <Button>
-            <Star className="h-4 w-4 mr-2" />
-            Shortlist Project
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold">My Projects</h1>
+        <p>View of funded projects by you</p>
       </div>
 
-      {/* Investment Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Investment</p>
-                <p className="text-2xl font-bold">₹1Cr</p>
-              </div>
-              <IndianRupee className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Current Value</p>
-                <p className="text-2xl font-bold">₹1.18Cr</p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Profit</p>
-                <p className="text-2xl font-bold">₹18L</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Shortlisted</p>
-                <p className="text-2xl font-bold">2</p>
-              </div>
-              <Heart className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Error State */}
+      {isError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {(error as any)?.response?.data?.message ||
+              (error as any)?.response?.data?.detail ||
+              (error as Error)?.message ||
+              'Failed to fetch funded projects. Please try again.'}
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Main Content */}
-      <Tabs defaultValue="funded" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="funded">Funded Projects</TabsTrigger>
-          <TabsTrigger value="shortlisted">Shortlisted</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="funded" className="space-y-6">
-          {/* Search and Filters */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <Input 
-                      placeholder="Search your funded projects..." 
-                      className="pl-10"
-                    />
-                  </div>
-                </div>
-                <Select>
-                  <SelectTrigger className="w-full md:w-[200px]">
-                    <SelectValue placeholder="All Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="live">Live</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Loading State */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Spinner size={20} />
+            <span>Loading funded projects...</span>
+          </div>
+        </div>
+      )}
 
-          {/* Funded Projects */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {mockMyProjects.funded.map((project) => (
-              <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="aspect-video bg-gradient-to-r from-blue-500 to-purple-600 relative">
-                  <div className="absolute top-4 right-4">
-                    <Badge variant="secondary" className="bg-green-600">
-                      {project.status}
-                    </Badge>
-                  </div>
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-sm">{project.municipality}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Star className="h-4 w-4" />
-                        <span className="text-sm">My Investment</span>
-                      </div>
-                    </div>
-                  </div>
+      {/* Funded Projects */}
+      {!isLoading && !isError && (
+        <>
+          {fundedProjects.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-12">
+                <div className="text-center">
+                  <Star className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-sm font-semibold text-gray-900 mb-1">No funded projects</h3>
+                  <p className="text-sm text-muted-foreground">
+                    You haven't funded any projects yet.
+                  </p>
                 </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {fundedProjects.map((project: any) => {
+                // Get commitment details from API response
+                const commitment = project.commitment || project.commitment_details || {}
+                const commitmentStatus = commitment.status || project.commitment_status || project.status
+                const commitmentAmount = commitment.amount || project.commitment_amount || project.amount || 0
                 
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{project.name}</CardTitle>
-                      <CardDescription className="flex items-center space-x-2">
-                        <MapPin className="h-3 w-3" />
-                        <span>{project.state}</span>
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline">{project.category}</Badge>
-                  </div>
-                </CardHeader>
+                const progress = getProgress(project.funding_percentage)
+                const myInvestment = formatCurrency(commitmentAmount)
+                const expectedROI = commitment.interest_rate || project.average_interest_rate || null
+                const currentValue = expectedROI ? myInvestment * (1 + (expectedROI / 100)) : myInvestment
+                const municipality = project.city || project.state || project.organization_id || 'N/A'
+                const stateDisplay = project.state || 'N/A'
+                const statusDisplay = commitmentStatus
+                  ? commitmentStatus.split('_').map((word: string) =>
+                      word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ')
+                  : 'Live'
+                const projectImage = project.image || 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center'
+                const investmentDate = commitment.created_at || commitment.commitment_date || project.created_at || project.fundraising_start_date || new Date().toISOString()
                 
-                <CardContent className="space-y-4">
-                  {/* Investment Details */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>My Investment</span>
-                      <span className="font-medium">₹{(project.myInvestment / 100000).toFixed(1)}L</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Current Value</span>
-                      <span className="font-medium text-green-600">₹{(project.currentValue / 100000).toFixed(1)}L</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Expected ROI</span>
-                      <span className="font-medium text-blue-600">{project.expectedROI}%</span>
-                    </div>
-                  </div>
-                  
-                  {/* Project Progress */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Project Progress</span>
-                      <span>{project.progress}%</span>
-                    </div>
-                    <Progress value={project.progress} className="h-2" />
-                  </div>
-                  
-                  {/* Investment Date */}
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>Invested: {new Date(project.investmentDate).toLocaleDateString()}</span>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex space-x-2 pt-4">
-                    <Button className="flex-1">
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Details
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Heart className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="shortlisted" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {mockMyProjects.shortlisted.map((project) => (
-              <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="aspect-video bg-gradient-to-r from-purple-500 to-pink-600 relative">
-                  <div className="absolute top-4 right-4">
-                    <Badge className="bg-purple-600">
-                      <Heart className="h-3 w-3 mr-1" />
-                      Shortlisted
-                    </Badge>
-                  </div>
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-sm">{project.municipality}</span>
+                // Extract commitment-specific fields
+                const projectReferenceId = project.project_reference_id || commitment.project_reference_id || 'N/A'
+                const fundingMode = commitment.funding_mode || project.funding_mode || 'N/A'
+                const tenureMonths = commitment.tenure_months || project.tenure_months || null
+                const termsConditions = commitment.terms_conditions_text || commitment.terms || project.terms_conditions_text || null
+
+                return (
+                  <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <div className="aspect-video bg-gradient-to-r from-blue-500 to-purple-600 relative">
+                      <img
+                        src={projectImage}
+                        alt={project.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop&crop=center'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/20" />
+                      <div className="absolute top-4 right-4">
+                        <Badge variant="secondary" className="bg-green-600">
+                          {statusDisplay}
+                        </Badge>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="h-4 w-4" />
-                        <span className="text-sm">{project.daysLeft} days left</span>
+                      <div className="absolute bottom-4 left-4 right-4 text-white">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="h-4 w-4" />
+                            <span className="text-sm">{municipality}</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Star className="h-4 w-4" />
+                            <span className="text-sm">My Investment</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
-                
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{project.name}</CardTitle>
-                      <CardDescription className="flex items-center space-x-2">
-                        <MapPin className="h-3 w-3" />
-                        <span>{project.state}</span>
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline">{project.category}</Badge>
-                  </div>
-                </CardHeader>
-                
-                <CardContent className="space-y-4">
-                  {/* Funding Progress */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Funding Progress</span>
-                      <span>{project.progress}%</span>
-                    </div>
-                    <Progress value={project.progress} className="h-2" />
-                    <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>₹{(project.currentFunding / 10000000).toFixed(1)}Cr raised</span>
-                      <span>₹{(project.fundRequired / 10000000).toFixed(1)}Cr target</span>
-                    </div>
-                  </div>
-                  
-                  {/* Shortlisted Date */}
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>Shortlisted: {new Date(project.shortlistedDate).toLocaleDateString()}</span>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex space-x-2 pt-4">
-                    <Button className="flex-1">
-                      <IndianRupee className="h-4 w-4 mr-2" />
-                      Fund Now
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Heart className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="completed" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {mockMyProjects.completed.map((project) => (
-              <Card key={project.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="aspect-video bg-gradient-to-r from-green-500 to-blue-600 relative">
-                  <div className="absolute top-4 right-4">
-                    <Badge className="bg-green-600">
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Completed
-                    </Badge>
-                  </div>
-                  <div className="absolute bottom-4 left-4 right-4 text-white">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="h-4 w-4" />
-                        <span className="text-sm">{project.municipality}</span>
+                    
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1 flex-1">
+                          <CardTitle className="text-lg">{project.title || 'Untitled Project'}</CardTitle>
+                          <CardDescription className="flex items-center space-x-2">
+                            <MapPin className="h-3 w-3" />
+                            <span>{stateDisplay}</span>
+                          </CardDescription>
+                          <div className="pt-1">
+                            <span className="text-xs text-muted-foreground">Ref ID: </span>
+                            <span className="text-xs font-mono font-medium">{projectReferenceId}</span>
+                          </div>
+                        </div>
+                        <Badge variant="outline">{project.category || 'N/A'}</Badge>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <TrendingUp className="h-4 w-4" />
-                        <span className="text-sm">{project.finalROI}% ROI</span>
+                    </CardHeader>
+                    
+                    <CardContent className="space-y-4">
+                      {/* Investment Details */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>My Investment</span>
+                          <span className="font-medium">₹{(myInvestment / 100000).toFixed(1)}L</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span>Current Value</span>
+                          <span className="font-medium text-green-600">₹{(currentValue / 100000).toFixed(1)}L</span>
+                        </div>
+                        {expectedROI !== null && (
+                          <div className="flex justify-between text-sm">
+                            <span>Interest Rate</span>
+                            <span className="font-medium text-blue-600">{Math.round(expectedROI * 10) / 10}%</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm">
+                          <span>Funding Mode</span>
+                          <span className="font-medium capitalize">{fundingMode}</span>
+                        </div>
+                        {tenureMonths && (
+                          <div className="flex justify-between text-sm">
+                            <span>Tenure</span>
+                            <span className="font-medium">{tenureMonths} {tenureMonths === 1 ? 'Month' : 'Months'}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{project.name}</CardTitle>
-                      <CardDescription className="flex items-center space-x-2">
-                        <MapPin className="h-3 w-3" />
-                        <span>{project.state}</span>
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline">{project.category}</Badge>
-                  </div>
-                </CardHeader>
-                
-                <CardContent className="space-y-4">
-                  {/* Investment Results */}
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Initial Investment</span>
-                      <span className="font-medium">₹{(project.myInvestment / 100000).toFixed(1)}L</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Final Value</span>
-                      <span className="font-medium text-green-600">₹{(project.finalValue / 100000).toFixed(1)}L</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Total Profit</span>
-                      <span className="font-medium text-green-600">₹{(project.profit / 100000).toFixed(1)}L</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Final ROI</span>
-                      <span className="font-medium text-green-600">{project.finalROI}%</span>
-                    </div>
-                  </div>
-                  
-                  {/* Completion Date */}
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>Completed: {new Date(project.completionDate).toLocaleDateString()}</span>
-                  </div>
-                  
-                  {/* Action Buttons */}
-                  <div className="flex space-x-2 pt-4">
-                    <Button className="flex-1">
-                      <Eye className="h-4 w-4 mr-2" />
-                      View Report
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <TrendingUp className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
+                      
+                      {/* Project Progress */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span>Project Progress</span>
+                          <span>{progress}%</span>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                      </div>
+                      
+                      {/* Investment Date */}
+                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>Invested: {formatDate(investmentDate)}</span>
+                      </div>
+                      
+                      {/* Terms & Conditions */}
+                      {termsConditions && (
+                        <div className="pt-2 border-t">
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">Terms & Conditions</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">
+                              {termsConditions}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Action Buttons */}
+                      <div className="flex space-x-2 pt-4">
+                        <Button 
+                          className="flex-1"
+                          onClick={() => navigate(`/main/projects/${project.id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Details
+                        </Button>
+                        <Button variant="outline" size="icon">
+                          <Heart className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
