@@ -267,7 +267,13 @@ console.log(user?.data?.login);
         error?.response?.data?.message ||
         error?.message ||
         "Failed to create question. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -304,7 +310,13 @@ console.log(user?.data?.login);
         error?.response?.data?.message ||
         error?.message ||
         "Failed to update question. This may happen if it already has an answer."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -372,7 +384,13 @@ console.log(user?.data?.login);
         error?.response?.data?.message ||
         error?.message ||
         "Failed to save answer. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetAnswerForm()
+      setIsAnswerDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -529,7 +547,13 @@ console.log(user?.data?.login);
         err?.message ||
         err?.response?.data?.message ||
         "Failed to add note. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetNoteForm()
+      setIsNoteDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 

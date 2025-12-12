@@ -244,7 +244,12 @@ export function FundingCommitmentDialog({
         error?.message ||
         error?.response?.data?.message ||
         "Failed to commit funding. Please review your inputs and try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      handleClose()
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -270,7 +275,12 @@ export function FundingCommitmentDialog({
         error?.response?.data?.detail ||
         error?.message ||
         "Failed to withdraw commitment. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      handleClose()
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 

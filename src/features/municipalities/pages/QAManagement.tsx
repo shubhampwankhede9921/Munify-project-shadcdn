@@ -226,7 +226,13 @@ export default function QAManagement() {
         error?.response?.data?.message ||
         error?.message ||
         isEditMode ? "Failed to update answer. Please try again." : "Failed to save answer. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetAnswerForm()
+      setIsAnswerDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -255,7 +261,13 @@ export default function QAManagement() {
         error?.response?.data?.message ||
         error?.message ||
         "Failed to delete answer. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      setDeletingQuestion(null)
+      setIsDeleteDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
