@@ -18,6 +18,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { alerts } from '@/lib/alerts'
 import apiService from '@/services/api'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/auth-context'
 
 // API Response Types
 interface ProjectCategory {
@@ -100,7 +101,7 @@ export default function CreateProject() {
   const [isProjectLoaded, setIsProjectLoaded] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [stageOpen, setStageOpen] = useState(false)
-  
+  const { user } = useAuth()
   // Check if we're editing a rejected project
   useEffect(() => {
     const isRejected = location.pathname.includes('/rejected/')
@@ -211,11 +212,11 @@ export default function CreateProject() {
     // Format dates for API
     const startDate = formData.startDate || ''
     const endDate = formData.endDate || ''
-    
+   
     // Format fundraising dates from user input
     const fundraisingStartDate = formData.fundraisingStartDate ? `${formData.fundraisingStartDate}T00:00:00` : undefined
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59` : undefined
-    const createdBy = 'shubhamw20'
+    const createdBy = user?.data?.login
     return {
       title: formData.projectTitle || 'Untitled Project',
       organization_type: 'municipality',
@@ -261,7 +262,7 @@ export default function CreateProject() {
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59Z` : undefined
 
     // Get current user email (fallback to contact person email for MVP)
-    const createdBy = 'shubhamw20'
+    const createdBy = user?.data?.login
 
     return {
       organization_type: 'municipality',

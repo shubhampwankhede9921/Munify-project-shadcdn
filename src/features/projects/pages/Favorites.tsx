@@ -19,6 +19,7 @@ import {
 import { apiService } from "@/services/api"
 import { alerts } from "@/lib/alerts"
 import { Spinner } from "@/components/ui/spinner"
+import { useAuth } from "@/contexts/auth-context"
 
 interface FavoriteProject {
   id: number
@@ -72,7 +73,8 @@ export default function Favorites() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
-  const userId = "shubhamw20" // TODO: Replace with auth user id
+  const { user } = useAuth()
+  const userId = user?.data?.login // TODO: Replace with auth user id
 
   const {
     data,

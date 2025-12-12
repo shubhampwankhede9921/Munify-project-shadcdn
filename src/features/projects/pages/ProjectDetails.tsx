@@ -55,6 +55,7 @@ import {
   CheckCircle,
   FilePlus,
 } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
 
 interface QuestionAnswer {
   id: number
@@ -150,7 +151,9 @@ export default function ProjectDetails() {
   const queryClient = useQueryClient()
 
   // TODO: replace with real authenticated user from auth context
-  const currentUserId = "shubhamw20"
+  const { user } = useAuth()
+console.log(user?.data?.login);
+  const currentUserId = user?.data?.login
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
@@ -264,7 +267,13 @@ export default function ProjectDetails() {
         error?.response?.data?.message ||
         error?.message ||
         "Failed to create question. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -301,7 +310,13 @@ export default function ProjectDetails() {
         error?.response?.data?.message ||
         error?.message ||
         "Failed to update question. This may happen if it already has an answer."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetQuestionForm()
+      setIsAskDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -369,7 +384,13 @@ export default function ProjectDetails() {
         error?.response?.data?.message ||
         error?.message ||
         "Failed to save answer. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetAnswerForm()
+      setIsAnswerDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
@@ -507,8 +528,8 @@ export default function ProjectDetails() {
         title: noteTitle.trim(),
         content: noteContent.trim(),
         tags: [] as string[],
-        created_by: "shubhamw20",
-        user_id: "shubhamw20",
+        created_by: user?.data?.login,
+        user_id: user?.data?.login,
       }
 
       return apiService.post("/project-notes/", payload)
@@ -526,7 +547,13 @@ export default function ProjectDetails() {
         err?.message ||
         err?.response?.data?.message ||
         "Failed to add note. Please try again."
-      alerts.error("Error", message)
+      // Close the main dialog first, then show error alert
+      resetNoteForm()
+      setIsNoteDialogOpen(false)
+      // Use setTimeout to ensure dialog closes before showing error alert
+      setTimeout(() => {
+        alerts.error("Error", message)
+      }, 100)
     },
   })
 
