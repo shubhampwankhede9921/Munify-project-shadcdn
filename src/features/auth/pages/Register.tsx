@@ -189,7 +189,24 @@ export default function Register() {
     setSubmitting(true)
 
     try {
+      // Find the selected role object from role selection field
       const selectedRole = roles.find((r) => r.id.toString() === form.roleId)
+      if (!selectedRole) {
+        setError("Please select a valid user role")
+        alerts.error("Validation error", "Please select a valid user role")
+        setSubmitting(false)
+        return
+      }
+      
+      // Find the selected organization object from Organization select list
+      const selectedOrganization = orgFields.organizationId 
+        ? organizations.find((o) => o.id.toString() === orgFields.organizationId)
+        : undefined
+      // Find the selected organization type object from Organization Type select list
+      const selectedOrgType = orgFields.organizationTypeId
+        ? organizations.find((o) => o.id.toString() === orgFields.organizationTypeId)
+        : undefined
+      
       const payload = {
         fullName: form.userName.trim(),
         login: form.login.trim(),
@@ -197,19 +214,28 @@ export default function Register() {
         confirmPassword: form.confirmPassword,
         email: form.email.trim(),
         mobileNumber: Number(form.mobileNumber),
-        organizationId: orgFields.organizationId ? Number(orgFields.organizationId) : undefined,
-        organizationTypeId: orgFields.organizationTypeId ? Number(orgFields.organizationTypeId) : undefined,
+        // Pass organization object with only id and branchName (as orgName) from Organization select list
+        organization: selectedOrganization ? {
+          id: selectedOrganization.id,
+          orgName: selectedOrganization.branchName
+        } : undefined,
+        // Pass organization type object with only id and branchName (as orgTypeName) from Organization Type select list
+        orgtypeObj: selectedOrgType ? {
+          id: selectedOrgType.id,
+          orgTypeName: selectedOrgType.branchName
+        } : undefined,
         designation: orgFields.designation.trim() || undefined,
         regulatoryRegistrationNo: orgFields.regulatoryRegistrationNo.trim() || undefined,
         municipalityStateDistrict: orgFields.municipalityStateDistrict.trim() || undefined,
         gstnOrUlbCode: orgFields.gstnOrUlbCode.trim() || undefined,
         annualBudgetSize: orgFields.annualBudgetSize.trim() || undefined,
+        // Pass userRoles with proper roleId and roleName from selected role
         userRoles: [
           {
             userId: form.login.trim(),
             userName: form.userName.trim(),
-            roleId: Number(form.roleId),
-            roleName: selectedRole?.name || "",
+            roleId: selectedRole.id,
+            roleName: selectedRole.name,
             userRoleId: null,
             id: null,
           },
@@ -217,7 +243,7 @@ export default function Register() {
       }
 
       const response = await apiService.post("/users/register", payload)
-      alerts.success("Application Submitted",response?.user?.login+" "+response.message+" successfully.")
+      alerts.success("Application Submitted", response?.data?.user_id + " user created successfully")
       navigate("/login")
     } catch (err: any) {
       const message = err?.response?.data?.error || err?.message || "Failed to register. Please try again."

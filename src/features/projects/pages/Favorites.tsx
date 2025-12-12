@@ -101,6 +101,7 @@ export default function Favorites() {
         throw err
       }
     },
+    enabled: !!userId, // Only run query when userId is available
   })
 
   // Normalize API response to a plain array of favorites
@@ -164,7 +165,7 @@ export default function Favorites() {
   })
 
   const handleUnfavorite = (projectReferenceId: string) => {
-    if (!projectReferenceId || deleteFavoriteMutation.isPending) return
+    if (!projectReferenceId || !userId || deleteFavoriteMutation.isPending) return
     deleteFavoriteMutation.mutate({
       project_reference_id: projectReferenceId.toString(),
       user_id: userId,

@@ -26,32 +26,20 @@ import { alerts } from "@/lib/alerts"
 import { cn } from "@/lib/utils"
 import { Spinner, LoadingOverlay } from "@/components/ui/spinner"
 
-
+// Type for organization/organization type items
+type OrganizationItem = {
+  id: number
+  branchName: string
+  version?: number
+}
 
 export default function AdminInvitation() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState("organization")
   const [error, setError] = useState<string | null>(null)
-  const {
-    data: roles = [],
-    isLoading: loadingRoles,
-    isError: rolesError,
-  } = useQuery({
-    queryKey: ["roles"],
-    queryFn: async () => await apiService.get<Array<{id: number, name: string, accessLevel: number}>>("/master/roles"),
-  })
   const [open, setOpen] = useState(false)
   const [orgNameOpen, setOrgNameOpen] = useState(false)
   const [orgTypeOpen, setOrgTypeOpen] = useState(false)
-  const {
-    data: organizations = [],
-    isLoading: loadingOrganizations,
-    isError: orgsError,
-  } = useQuery({
-    queryKey: ["organizations"],
-    queryFn: async () => await apiService.get<Array<{id: number, branchName: string, version: number}>>("/organizations/organizations"),
-  })
-  
 
   // Organization form state
   const [orgForm, setOrgForm] = useState({
@@ -69,8 +57,80 @@ export default function AdminInvitation() {
     roleId: ""
   })
 
+  const {
+    data: roles = [],
+    isLoading: loadingRoles,
+  } = useQuery({
+    queryKey: ["roles"],
+    queryFn: async () => await apiService.get<Array<{id: number, name: string, accessLevel: number}>>("/master/roles"),
+  })
+  
+  // Fetch organization types using Perdix API with parent_branch_id: 999
+  const {
+    data: organizationTypes = [],
+    isLoading: loadingOrgTypes,
+  } = useQuery({
+    queryKey: ["organizationTypes"],
+    queryFn: async () => {
+      const response = await apiService.post("/perdix/query", {
+        identifier: "childBranch.list",
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: 999
+        },
+        skip_relogin: "yes"
+      })
+      // Extract results array and map branch_name to branchName for consistency
+      const results = (response as any)?.results || []
+      return results.map((item: any): OrganizationItem => ({
+        id: item.id,
+        branchName: item.branch_name || item.branchName,
+        version: item.version
+      }))
+    },
+  })
+
+  // Fetch organizations based on selected organization type
+  const {
+    data: organizations = [],
+    isLoading: loadingOrganizations,
+  } = useQuery({
+    queryKey: ["organizations", orgForm.organizationTypeId],
+    queryFn: async () => {
+      if (!orgForm.organizationTypeId) {
+        return []
+      }
+      const response = await apiService.post("/perdix/query", {
+        identifier: "childBranch.list",
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: Number(orgForm.organizationTypeId)
+        },
+        skip_relogin: "yes"
+      })
+      // Extract results array and map branch_name to branchName for consistency
+      const results = (response as any)?.results || []
+      return results.map((item: any): OrganizationItem => ({
+        id: item.id,
+        branchName: item.branch_name || item.branchName,
+        version: item.version
+      }))
+    },
+    enabled: !!orgForm.organizationTypeId, // Only fetch when organization type is selected
+  })
+
   const handleOrgChange = (field: keyof typeof orgForm, value: string) => {
-    setOrgForm(prev => ({ ...prev, [field]: value }))
+    setOrgForm(prev => {
+      const updated = { ...prev, [field]: value }
+      // Clear organization selection when organization type changes
+      if (field === "organizationTypeId") {
+        updated.organizationId = ""
+        setSelectedOrgType("")
+      }
+      return updated
+    })
   }
 
   const handleOrgNameChange = (value: string) => {
@@ -84,13 +144,6 @@ export default function AdminInvitation() {
     setUserForm(prev => ({ ...prev, [field]: value }))
   }
 
-  // Surface fetch errors once
-  if (rolesError) {
-    console.error("Failed to fetch roles")
-  }
-  if (orgsError) {
-    console.error("Failed to fetch organizations")
-  }
 
   const validateOrganization = () => {
     if (!orgForm.organizationId) return "Organization is required"
@@ -158,7 +211,7 @@ export default function AdminInvitation() {
   }
 
   const getOrganizationTypeDescription = () => {
-    const selectedOrg = organizations.find(org => org.id.toString() === orgForm.organizationTypeId)
+    const selectedOrg = organizationTypes.find((org: OrganizationItem) => org.id.toString() === orgForm.organizationTypeId)
     return selectedOrg?.branchName || ""
   }
 
@@ -169,7 +222,6 @@ export default function AdminInvitation() {
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
-           
             <div>
               <h1 className="text-2xl font-bold">Admin Panel</h1>
               <p className="text-sm text-muted-foreground">Send User Invitations</p>
@@ -212,63 +264,6 @@ export default function AdminInvitation() {
 
               <TabsContent value="organization" className="space-y-6 mt-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Organization Name */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="organizationName">Organization Name *</Label>
-                    <Popover open={orgNameOpen} onOpenChange={setOrgNameOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={orgNameOpen}
-                          className="w-full justify-between h-10"
-                          disabled={submitting || loadingOrganizations}
-                        >
-                          <div className="flex items-center text-gray-500 font-normal">
-                            <Building2 className="mr-3 h-4 w-4 text-gray-400" />
-                            {loadingOrganizations ? (
-                              <span className="flex items-center gap-2"><Spinner size={16} /> Loading organizations...</span>
-                            ) : selectedOrgType
-                              ? organizations.find((org) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
-                              : "Select organization"}
-                          </div>
-                          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-full p-0">
-                        {loadingOrganizations ? (
-                          <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organizations...</div>
-                        ) : (
-                          <Command>
-                            <CommandInput placeholder="Search organizations..." />
-                            <CommandList>
-                              <CommandEmpty>No organization found.</CommandEmpty>
-                              <CommandGroup>
-                                {organizations.map((org) => (
-                                  <CommandItem
-                                    key={org.id}
-                                    value={org.branchName}
-                                    onSelect={() => handleOrgNameChange(`${org.id}-${org.branchName}`)}
-                                  >
-                                    <Check
-                                      className={`mr-2 h-4 w-4 ${
-                                        selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
-                                      }`}
-                                    />
-                                    <div className="flex flex-col">
-                                      <span className="font-medium">{org.branchName}</span>
-                                      <span className="text-xs text-muted-foreground">ID: {org.id}</span>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        )}
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
                   {/* Organization Type */}
                   <div className="space-y-1.5">
                     <Label htmlFor="organizationType">Organization Type *</Label>
@@ -279,14 +274,14 @@ export default function AdminInvitation() {
                           role="combobox"
                           aria-expanded={orgTypeOpen}
                           className="w-full justify-between h-10"
-                          disabled={submitting || loadingOrganizations}
+                          disabled={submitting || loadingOrgTypes}
                         >
                           <div className="flex items-center text-gray-500 font-normal">
                             <Building2 className="mr-3 h-4 w-4 text-gray-400" />
-                            {loadingOrganizations ? (
-                              <span className="flex items-center gap-2"><Spinner size={16} /> Loading organizations...</span>
+                            {loadingOrgTypes ? (
+                              <span className="flex items-center gap-2"><Spinner size={16} /> Loading organization types...</span>
                             ) : orgForm.organizationTypeId ? (
-                              organizations.find(org => org.id.toString() === orgForm.organizationTypeId)?.branchName
+                              organizationTypes.find((org: OrganizationItem) => org.id.toString() === orgForm.organizationTypeId)?.branchName
                             ) : (
                               "Select organization type"
                             )}
@@ -295,15 +290,15 @@ export default function AdminInvitation() {
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-full p-0">
-                        {loadingOrganizations ? (
-                          <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organizations...</div>
+                        {loadingOrgTypes ? (
+                          <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organization types...</div>
                         ) : (
                           <Command>
                             <CommandInput placeholder="Search organization types..." />
                             <CommandList>
                               <CommandEmpty>No organization type found.</CommandEmpty>
                               <CommandGroup>
-                                {organizations.map((org) => (
+                                {organizationTypes.map((org: OrganizationItem) => (
                                   <CommandItem
                                     key={org.id}
                                     value={org.branchName}
@@ -334,12 +329,68 @@ export default function AdminInvitation() {
                       <p className="text-xs text-muted-foreground">{getOrganizationTypeDescription()}</p>
                     )}
                   </div>
+
+                  {/* Organization Name */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="organizationName">Organization Name *</Label>
+                    <Popover open={orgNameOpen} onOpenChange={setOrgNameOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={orgNameOpen}
+                          className="w-full justify-between h-10"
+                          disabled={submitting || loadingOrganizations || !orgForm.organizationTypeId}
+                        >
+                          <div className="flex items-center text-gray-500 font-normal">
+                            <Building2 className="mr-3 h-4 w-4 text-gray-400" />
+                            {!orgForm.organizationTypeId ? (
+                              "Please select organization type first"
+                            ) : loadingOrganizations ? (
+                              <span className="flex items-center gap-2"><Spinner size={16} /> Loading organizations...</span>
+                            ) : selectedOrgType
+                              ? organizations.find((org: OrganizationItem) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
+                              : "Select organization"}
+                          </div>
+                          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-full p-0">
+                        {!orgForm.organizationTypeId ? (
+                          <div className="p-3 text-sm text-muted-foreground">Please select an organization type first</div>
+                        ) : loadingOrganizations ? (
+                          <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organizations...</div>
+                        ) : (
+                          <Command>
+                            <CommandInput placeholder="Search organizations..." />
+                            <CommandList>
+                              <CommandEmpty>No organization found.</CommandEmpty>
+                              <CommandGroup>
+                                {organizations.map((org: OrganizationItem) => (
+                                  <CommandItem
+                                    key={org.id}
+                                    value={org.branchName}
+                                    onSelect={() => handleOrgNameChange(`${org.id}-${org.branchName}`)}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    <div className="flex flex-col">
+                                      <span className="font-medium">{org.branchName}</span>
+                                      <span className="text-xs text-muted-foreground">ID: {org.id}</span>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  </div>
                 </div>
-
-                
-
-                
-
               </TabsContent>
 
               <TabsContent value="user" className="space-y-6 mt-6">
