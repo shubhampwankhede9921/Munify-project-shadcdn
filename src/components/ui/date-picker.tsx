@@ -75,6 +75,10 @@ export function DatePicker({
           mode="single"
           selected={current}
           captionLayout="dropdown"
+          // Allow navigating freely across a wide year range so the
+          // calendar is not implicitly capped to the current month/year.
+          fromYear={1900}
+          toYear={2100}
           onSelect={handleSelect}
           initialFocus
         />

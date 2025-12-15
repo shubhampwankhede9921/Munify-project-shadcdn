@@ -31,6 +31,21 @@ interface ProjectStage {
   value: string
 }
 
+interface FundingType {
+  id: number
+  value: string
+}
+
+interface ModeOfImplementation {
+  id: number
+  value: string
+}
+
+interface Ownership {
+  id: number
+  value: string
+}
+
 // Sample Municipalities (will be replaced with API data later)
 const municipalities = [
   { id: 'BMC', name: 'Brihanmumbai Municipal Corporation', code: 'BMC' },
@@ -61,6 +76,11 @@ interface FormData {
   description: string
   startDate: string
   endDate: string
+  fundingType: string // Funding Type from Munify master
+  commitmentAllocationDays: string // Default 7 days
+  minimumCommitmentFulfilmentPercentage: string // Percentage
+  modeOfImplementation: string // Mode of Implementation from mode master
+  ownership: string // Ownership from Munify master
   
   // Financial Information
   totalProjectCost: string
@@ -70,6 +90,10 @@ interface FormData {
   fundraisingEndDate: string
   municipalityCreditRating: string
   municipalityCreditScore: string
+  tenure: string // Loan tenure / repayment period
+  cutOffRatePercentage: string // Minimum acceptable interest rate
+  minimumCommitmentAmount: string
+  conditions: string // Mandatory terms set by Municipality
   
   // Location
   state: string
@@ -101,6 +125,9 @@ export default function CreateProject() {
   const [isProjectLoaded, setIsProjectLoaded] = useState(false)
   const [categoryOpen, setCategoryOpen] = useState(false)
   const [stageOpen, setStageOpen] = useState(false)
+  const [fundingTypeOpen, setFundingTypeOpen] = useState(false)
+  const [modeOpen, setModeOpen] = useState(false)
+  const [ownershipOpen, setOwnershipOpen] = useState(false)
   const { user } = useAuth()
   // Check if we're editing a rejected project
   useEffect(() => {
@@ -119,6 +146,27 @@ export default function CreateProject() {
     queryKey: ['project-stages'],
     queryFn: () => apiService.get('/master/project-stages'),
     retry: false, // Don't retry if endpoint doesn't exist
+  })
+
+  // Query for funding types
+  const { data: fundingTypesResponse, isLoading: isLoadingFundingTypes } = useQuery({
+    queryKey: ['funding-types'],
+    queryFn: () => apiService.get('/master/funding-types'),
+    retry: false,
+  })
+
+  // Query for modes of implementation
+  const { data: modesResponse, isLoading: isLoadingModes } = useQuery({
+    queryKey: ['modes-of-implementation'],
+    queryFn: () => apiService.get('/master/mode-of-implementations'),
+    retry: false,
+  })
+
+  // Query for ownership types
+  const { data: ownershipResponse, isLoading: isLoadingOwnership } = useQuery({
+    queryKey: ['ownership-types'],
+    queryFn: () => apiService.get('/master/ownerships'),
+    retry: false,
   })
 
   // Extract categories and stages from API response
@@ -145,6 +193,39 @@ export default function CreateProject() {
     }
     return []
   }, [stagesResponse])
+
+  const fundingTypes: FundingType[] = useMemo(() => {
+    if (!fundingTypesResponse) return []
+    if ('data' in fundingTypesResponse && Array.isArray(fundingTypesResponse.data)) {
+      return fundingTypesResponse.data
+    }
+    if (Array.isArray(fundingTypesResponse)) {
+      return fundingTypesResponse
+    }
+    return []
+  }, [fundingTypesResponse])
+
+  const modesOfImplementation: ModeOfImplementation[] = useMemo(() => {
+    if (!modesResponse) return []
+    if ('data' in modesResponse && Array.isArray(modesResponse.data)) {
+      return modesResponse.data
+    }
+    if (Array.isArray(modesResponse)) {
+      return modesResponse
+    }
+    return []
+  }, [modesResponse])
+
+  const ownershipTypes: Ownership[] = useMemo(() => {
+    if (!ownershipResponse) return []
+    if ('data' in ownershipResponse && Array.isArray(ownershipResponse.data)) {
+      return ownershipResponse.data
+    }
+    if (Array.isArray(ownershipResponse)) {
+      return ownershipResponse
+    }
+    return []
+  }, [ownershipResponse])
 
   // Reset draft loaded flag when draftId changes
   useEffect(() => {
@@ -177,6 +258,11 @@ export default function CreateProject() {
     description: '',
     startDate: '',
     endDate: '',
+    fundingType: '',
+    commitmentAllocationDays: '7', // Default 7 days
+    minimumCommitmentFulfilmentPercentage: '',
+    modeOfImplementation: '',
+    ownership: '',
     totalProjectCost: '',
     fundingRequirement: '',
     alreadySecuredFunds: '0',
@@ -184,6 +270,10 @@ export default function CreateProject() {
     fundraisingEndDate: '',
     municipalityCreditRating: '',
     municipalityCreditScore: '',
+    tenure: '',
+    cutOffRatePercentage: '',
+    minimumCommitmentAmount: '',
+    conditions: '',
     state: '',
     city: '',
     ward: '',
@@ -240,6 +330,17 @@ export default function CreateProject() {
       fundraising_end_date: fundraisingEndDate,
       municipality_credit_rating: formData.municipalityCreditRating || undefined,
       municipality_credit_score: formData.municipalityCreditScore ? parseFloat(formData.municipalityCreditScore) : undefined,
+      // New Overview fields
+      funding_type: formData.fundingType || undefined,
+      commitment_allocation_days: formData.commitmentAllocationDays ? parseInt(formData.commitmentAllocationDays, 10) : undefined,
+      minimum_commitment_fulfilment_percentage: formData.minimumCommitmentFulfilmentPercentage ? parseFloat(formData.minimumCommitmentFulfilmentPercentage) : undefined,
+      mode_of_implementation: formData.modeOfImplementation || undefined,
+      ownership: formData.ownership || undefined,
+      // New Financial fields
+      tenure: formData.tenure ? parseInt(formData.tenure, 10) : undefined,
+      cut_off_rate_percentage: formData.cutOffRatePercentage ? parseFloat(formData.cutOffRatePercentage) : undefined,
+      minimum_commitment_amount: formData.minimumCommitmentAmount ? parseFloat(formData.minimumCommitmentAmount) : undefined,
+      conditions: formData.conditions || undefined,
       // Location fields
       state: formData.state || undefined,
       city: formData.city || undefined,
@@ -289,6 +390,17 @@ export default function CreateProject() {
       fundraising_end_date: fundraisingEndDate,
       municipality_credit_rating: formData.municipalityCreditRating || '',
       municipality_credit_score: formData.municipalityCreditScore || '',
+      // New Overview fields
+      funding_type: formData.fundingType || '',
+      commitment_allocation_days: formData.commitmentAllocationDays ? parseInt(formData.commitmentAllocationDays, 10) : 7,
+      minimum_commitment_fulfilment_percentage: formData.minimumCommitmentFulfilmentPercentage ? parseFloat(formData.minimumCommitmentFulfilmentPercentage) : undefined,
+      mode_of_implementation: formData.modeOfImplementation || '',
+      ownership: formData.ownership || '',
+      // New Financial fields
+      tenure: formData.tenure ? parseInt(formData.tenure, 10) : undefined,
+      cut_off_rate_percentage: formData.cutOffRatePercentage ? parseFloat(formData.cutOffRatePercentage) : undefined,
+      minimum_commitment_amount: formData.minimumCommitmentAmount ? parseFloat(formData.minimumCommitmentAmount) : undefined,
+      conditions: formData.conditions || '',
       status: status,
       visibility: 'public', // Default to private for MVP
       approved_by: null, // Will be set by backend on approval
@@ -360,6 +472,17 @@ export default function CreateProject() {
           fundraisingEndDate: item.fundraising_end_date ? item.fundraising_end_date.split('T')[0] : prev.fundraisingEndDate,
           municipalityCreditRating: item.municipality_credit_rating ?? prev.municipalityCreditRating,
           municipalityCreditScore: item.municipality_credit_score != null ? String(item.municipality_credit_score) : prev.municipalityCreditScore,
+          // New Overview fields
+          fundingType: item.funding_type ?? prev.fundingType,
+          commitmentAllocationDays: item.commitment_allocation_days != null ? String(item.commitment_allocation_days) : prev.commitmentAllocationDays,
+          minimumCommitmentFulfilmentPercentage: item.minimum_commitment_fulfilment_percentage != null ? String(item.minimum_commitment_fulfilment_percentage) : prev.minimumCommitmentFulfilmentPercentage,
+          modeOfImplementation: item.mode_of_implementation ?? prev.modeOfImplementation,
+          ownership: item.ownership ?? prev.ownership,
+          // New Financial fields
+          tenure: item.tenure != null ? String(item.tenure) : prev.tenure,
+          cutOffRatePercentage: item.cut_off_rate_percentage != null ? String(item.cut_off_rate_percentage) : prev.cutOffRatePercentage,
+          minimumCommitmentAmount: item.minimum_commitment_amount != null ? String(item.minimum_commitment_amount) : prev.minimumCommitmentAmount,
+          conditions: item.conditions ?? prev.conditions,
           // Location fields if available
           state: item.state ?? prev.state,
           city: item.city ?? prev.city,
@@ -484,6 +607,17 @@ export default function CreateProject() {
       fundraising_end_date: fundraisingEndDate,
       municipality_credit_rating: formData.municipalityCreditRating || '',
       municipality_credit_score: formData.municipalityCreditScore || '',
+      // New Overview fields
+      funding_type: formData.fundingType || undefined,
+      commitment_allocation_days: formData.commitmentAllocationDays ? parseInt(formData.commitmentAllocationDays, 10) : undefined,
+      minimum_commitment_fulfilment_percentage: formData.minimumCommitmentFulfilmentPercentage ? parseFloat(formData.minimumCommitmentFulfilmentPercentage) : undefined,
+      mode_of_implementation: formData.modeOfImplementation || undefined,
+      ownership: formData.ownership || undefined,
+      // New Financial fields
+      tenure: formData.tenure ? parseInt(formData.tenure, 10) : undefined,
+      cut_off_rate_percentage: formData.cutOffRatePercentage ? parseFloat(formData.cutOffRatePercentage) : undefined,
+      minimum_commitment_amount: formData.minimumCommitmentAmount ? parseFloat(formData.minimumCommitmentAmount) : undefined,
+      conditions: formData.conditions || undefined,
       // Location fields
       state: formData.state || undefined,
       city: formData.city || undefined,
@@ -652,6 +786,26 @@ export default function CreateProject() {
     if (formData.startDate && formData.endDate && new Date(formData.startDate) >= new Date(formData.endDate)) {
       newErrors.endDate = 'End date must be after start date'
     }
+    if (!formData.fundingType) {
+      newErrors.fundingType = 'Funding type is required'
+    }
+    if (!formData.commitmentAllocationDays || parseInt(formData.commitmentAllocationDays) <= 0) {
+      newErrors.commitmentAllocationDays = 'Commitment allocation days is required and must be greater than 0'
+    }
+    if (!formData.minimumCommitmentFulfilmentPercentage) {
+      newErrors.minimumCommitmentFulfilmentPercentage = 'Minimum commitment fulfilment is required'
+    } else {
+      const fulfilment = parseFloat(formData.minimumCommitmentFulfilmentPercentage)
+      if (isNaN(fulfilment) || fulfilment < 0 || fulfilment > 100) {
+        newErrors.minimumCommitmentFulfilmentPercentage = 'Minimum commitment fulfilment must be between 0 and 100'
+      }
+    }
+    if (!formData.modeOfImplementation) {
+      newErrors.modeOfImplementation = 'Mode of implementation is required'
+    }
+    if (!formData.ownership) {
+      newErrors.ownership = 'Ownership is required'
+    }
 
     // Financial Information
     const totalCost = parseFloat(formData.totalProjectCost)
@@ -679,6 +833,35 @@ export default function CreateProject() {
     }
     if (formData.fundraisingStartDate && formData.fundraisingEndDate && new Date(formData.fundraisingStartDate) >= new Date(formData.fundraisingEndDate)) {
       newErrors.fundraisingEndDate = 'Fundraising end date must be after start date'
+    }
+
+    // Financial Information - New Fields
+    if (!formData.tenure) {
+      newErrors.tenure = 'Tenure is required'
+    } else {
+      const tenureValue = parseInt(formData.tenure, 10)
+      if (isNaN(tenureValue) || tenureValue <= 0) {
+        newErrors.tenure = 'Tenure must be a positive number'
+      }
+    }
+    if (!formData.cutOffRatePercentage) {
+      newErrors.cutOffRatePercentage = 'Cut-off rate is required'
+    } else {
+      const rate = parseFloat(formData.cutOffRatePercentage)
+      if (isNaN(rate) || rate < 0 || rate > 100) {
+        newErrors.cutOffRatePercentage = 'Cut-off rate must be between 0 and 100'
+      }
+    }
+    if (!formData.minimumCommitmentAmount) {
+      newErrors.minimumCommitmentAmount = 'Minimum commitment amount is required'
+    } else {
+      const amount = parseFloat(formData.minimumCommitmentAmount)
+      if (isNaN(amount) || amount <= 0) {
+        newErrors.minimumCommitmentAmount = 'Minimum commitment amount must be greater than 0'
+      }
+    }
+    if (!formData.conditions.trim()) {
+      newErrors.conditions = 'Conditions are required'
     }
 
     // Location
@@ -717,7 +900,12 @@ export default function CreateProject() {
           formData.stage &&
           formData.description.trim() &&
           formData.startDate &&
-          formData.endDate
+          formData.endDate &&
+          formData.fundingType &&
+          formData.commitmentAllocationDays &&
+          formData.minimumCommitmentFulfilmentPercentage &&
+          formData.modeOfImplementation &&
+          formData.ownership
         )
       case 'financial':
         return !!(
@@ -725,6 +913,10 @@ export default function CreateProject() {
           formData.fundingRequirement &&
           formData.fundraisingStartDate &&
           formData.fundraisingEndDate &&
+          formData.tenure &&
+          formData.cutOffRatePercentage &&
+          formData.minimumCommitmentAmount &&
+          formData.conditions.trim() &&
           formData.state.trim() &&
           formData.city.trim() &&
           formData.ward.trim()
@@ -1260,6 +1452,231 @@ export default function CreateProject() {
                 )}
               </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="fundingType">Funding Type *</Label>
+                <Popover open={fundingTypeOpen} onOpenChange={setFundingTypeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={fundingTypeOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.fundingType && "border-red-500",
+                        !formData.fundingType && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingFundingTypes}
+                    >
+                      {isLoadingFundingTypes ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading funding types...
+                        </span>
+                      ) : formData.fundingType ? (
+                        fundingTypes.find((ft) => ft.value === formData.fundingType)?.value || formData.fundingType
+                      ) : (
+                        "Select funding type"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search funding types..." />
+                      <CommandList>
+                        <CommandEmpty>No funding type found.</CommandEmpty>
+                        <CommandGroup>
+                          {fundingTypes.map((fundingType) => (
+                            <CommandItem
+                              key={fundingType.id}
+                              value={fundingType.value}
+                              onSelect={() => {
+                                handleChange('fundingType', fundingType.value)
+                                setFundingTypeOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.fundingType === fundingType.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {fundingType.value}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {errors.fundingType && (
+                  <p className="text-sm text-red-500">{errors.fundingType}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="commitmentAllocationDays">Commitment Allocation Days *</Label>
+                <Input
+                  id="commitmentAllocationDays"
+                  type="number"
+                  min="1"
+                  value={formData.commitmentAllocationDays}
+                  onChange={(e) => handleChange('commitmentAllocationDays', e.target.value)}
+                  placeholder="7"
+                  className={errors.commitmentAllocationDays ? 'border-red-500' : ''}
+                />
+                {errors.commitmentAllocationDays && (
+                  <p className="text-sm text-red-500">{errors.commitmentAllocationDays}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Default: 7 days if not configured
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="minimumCommitmentFulfilmentPercentage">Minimum Commitment Fulfilment (%) *</Label>
+                <Input
+                  id="minimumCommitmentFulfilmentPercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.minimumCommitmentFulfilmentPercentage}
+                  onChange={(e) => handleChange('minimumCommitmentFulfilmentPercentage', e.target.value)}
+                  placeholder="e.g., 50.00"
+                  className={errors.minimumCommitmentFulfilmentPercentage ? 'border-red-500' : ''}
+                />
+                {errors.minimumCommitmentFulfilmentPercentage && (
+                  <p className="text-sm text-red-500">{errors.minimumCommitmentFulfilmentPercentage}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="modeOfImplementation">Mode of Implementation *</Label>
+                <Popover open={modeOpen} onOpenChange={setModeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={modeOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.modeOfImplementation && "border-red-500",
+                        !formData.modeOfImplementation && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingModes}
+                    >
+                      {isLoadingModes ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading modes...
+                        </span>
+                      ) : formData.modeOfImplementation ? (
+                        modesOfImplementation.find((m) => m.value === formData.modeOfImplementation)?.value || formData.modeOfImplementation
+                      ) : (
+                        "Select mode"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search modes..." />
+                      <CommandList>
+                        <CommandEmpty>No mode found.</CommandEmpty>
+                        <CommandGroup>
+                          {modesOfImplementation.map((mode) => (
+                            <CommandItem
+                              key={mode.id}
+                              value={mode.value}
+                              onSelect={() => {
+                                handleChange('modeOfImplementation', mode.value)
+                                setModeOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.modeOfImplementation === mode.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {mode.value}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {errors.modeOfImplementation && (
+                  <p className="text-sm text-red-500">{errors.modeOfImplementation}</p>
+                )}
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="ownership">Ownership *</Label>
+                <Popover open={ownershipOpen} onOpenChange={setOwnershipOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={ownershipOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.ownership && "border-red-500",
+                        !formData.ownership && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingOwnership}
+                    >
+                      {isLoadingOwnership ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading ownership types...
+                        </span>
+                      ) : formData.ownership ? (
+                        ownershipTypes.find((o) => o.value === formData.ownership)?.value || formData.ownership
+                      ) : (
+                        "Select ownership"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search ownership types..." />
+                      <CommandList>
+                        <CommandEmpty>No ownership type found.</CommandEmpty>
+                        <CommandGroup>
+                          {ownershipTypes.map((ownership) => (
+                            <CommandItem
+                              key={ownership.id}
+                              value={ownership.value}
+                              onSelect={() => {
+                                handleChange('ownership', ownership.value)
+                                setOwnershipOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.ownership === ownership.value ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {ownership.value}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+                {errors.ownership && (
+                  <p className="text-sm text-red-500">{errors.ownership}</p>
+                )}
+              </div>
+            </div>
           </CardContent>
         </Card>
             {/* Tab Navigation */}
@@ -1435,6 +1852,83 @@ export default function CreateProject() {
                 )}
                 <p className="text-xs text-muted-foreground">
                   Credit score of the municipality (0-100)
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="tenure">Tenure (Loan Tenure / Repayment Period) *</Label>
+                <Input
+                  id="tenure"
+                  type="number"
+                  min="1"
+                  value={formData.tenure}
+                  onChange={(e) => handleChange('tenure', e.target.value)}
+                  placeholder="e.g., 60 (months)"
+                  className={errors.tenure ? 'border-red-500' : ''}
+                />
+                {errors.tenure && (
+                  <p className="text-sm text-red-500">{errors.tenure}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Loan tenure or repayment period in months
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cutOffRatePercentage">Cut-off Rate (Minimum Acceptable Interest Rate) *</Label>
+                <Input
+                  id="cutOffRatePercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={formData.cutOffRatePercentage}
+                  onChange={(e) => handleChange('cutOffRatePercentage', e.target.value)}
+                  placeholder="e.g., 5.50"
+                  className={errors.cutOffRatePercentage ? 'border-red-500' : ''}
+                />
+                {errors.cutOffRatePercentage && (
+                  <p className="text-sm text-red-500">{errors.cutOffRatePercentage}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Minimum acceptable interest rate (%)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="minimumCommitmentAmount">Minimum Commitment Amount (₹) *</Label>
+                <Input
+                  id="minimumCommitmentAmount"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.minimumCommitmentAmount}
+                  onChange={(e) => handleChange('minimumCommitmentAmount', e.target.value)}
+                  placeholder="e.g., 1000000"
+                  className={errors.minimumCommitmentAmount ? 'border-red-500' : ''}
+                />
+                {errors.minimumCommitmentAmount && (
+                  <p className="text-sm text-red-500">{errors.minimumCommitmentAmount}</p>
+                )}
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="conditions">Conditions (Mandatory Terms Set by Municipality) *</Label>
+                <Textarea
+                  id="conditions"
+                  value={formData.conditions}
+                  onChange={(e) => handleChange('conditions', e.target.value)}
+                  placeholder="Enter mandatory terms and conditions set by the municipality"
+                  rows={4}
+                  className={errors.conditions ? 'border-red-500' : ''}
+                />
+                {errors.conditions && (
+                  <p className="text-sm text-red-500">{errors.conditions}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Mandatory terms and conditions set by the municipality
                 </p>
               </div>
             </div>
