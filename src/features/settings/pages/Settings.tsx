@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useParams } from "react-router-dom"
+import { useState, useEffect, useMemo } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { LoadingOverlay, Spinner } from "@/components/ui/spinner"
 import { alerts } from "@/lib/alerts"
 import { apiService } from "@/services/api"
+import { useAuth } from "@/contexts/auth-context"
 import { 
   User, 
   Mail, 
@@ -116,38 +116,36 @@ interface ChangePasswordRequest {
 
 export default function Settings() {
   const queryClient = useQueryClient()
-  const { userId: routeUserId } = useParams<{ userId: string }>()
+  const { user, isLoading: authLoading, refreshUser } = useAuth()
   const [activeTab, setActiveTab] = useState<"profile" | "password">("profile")
   const [isEditing, setIsEditing] = useState(false)
   const [otpRequestedFor, setOtpRequestedFor] = useState<string>("")
   const [fullUserPayload, setFullUserPayload] = useState<FullUserPayload | null>(null)
 
-  // Fetch profile from FastAPI using userId from the route
-  const {
-    data: profile,
-    isLoading: loadingProfile,
-    isError: profileError,
-  } = useQuery({
-    queryKey: ["user-profile", routeUserId],
-    enabled: !!routeUserId,
-    queryFn: async () => {
-      const response = await apiService.get(`/users/perdix/${routeUserId}`)
-      const payload: any = response?.data?.data ?? response?.data ?? response
-      
-      // Store the full payload for update
-      setFullUserPayload(payload as FullUserPayload)
-      
-      // Map to simplified profile for form
-      const mapped: UserProfile = {
-        id: payload?.id ?? payload?.user_id,
-        fullName: payload?.userName,
-        userId: payload?.userId ?? payload?.username ?? payload?.login ?? payload?.user_id ?? routeUserId ?? "",
-        email: payload?.email ?? "",
-        mobileNumber: payload?.mobileNumber ?? payload?.mobile_number ?? payload?.phone ?? "",
-      }
-      return mapped
-    },
-  })
+  // Extract user data from session storage (useAuth)
+  const userData = user?.data || user
+
+  // Map user data from session storage to UserProfile interface
+  const profile: UserProfile | null = useMemo(() => {
+    if (!userData) return null
+    
+    const mapped: UserProfile = {
+      id: userData?.id ?? userData?.user_id,
+      fullName: userData?.userName ?? userData?.fullName ?? userData?.name ?? "",
+      userId: userData?.userId ?? userData?.username ?? userData?.login ?? userData?.user_id ?? "",
+      email: userData?.email ?? "",
+      mobileNumber: userData?.mobileNumber?.toString() ?? userData?.mobile_number?.toString() ?? userData?.phone?.toString() ?? "",
+    }
+    
+    return mapped
+  }, [userData])
+
+  // Store full user payload for update operations
+  useEffect(() => {
+    if (userData) {
+      setFullUserPayload(userData as FullUserPayload)
+    }
+  }, [userData])
 
   // Profile form state
   const [profileForm, setProfileForm] = useState<UserProfile>({
@@ -157,7 +155,7 @@ export default function Settings() {
     mobileNumber: "",
   })
 
-  // Initialize form with fetched profile data
+  // Initialize form with user data from session storage
   useEffect(() => {
     if (!profile) return
     setProfileForm({
@@ -265,8 +263,7 @@ export default function Settings() {
       // Update endpoint is /users/perdix (without userId in path)
       return await apiService.put<FullUserPayload>("/users/perdix", updatedPayload)
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["user-profile", routeUserId] })
+    onSuccess: async (data) => {
       // Update full payload with returned data
       if (data) {
         setFullUserPayload(data as FullUserPayload)
@@ -274,10 +271,12 @@ export default function Settings() {
         const payload = data as any
         setProfileForm({
           fullName: payload?.userName || "",
-          userId: (payload?.userId ?? payload?.login ?? payload?.username ?? routeUserId) || "",
+          userId: (payload?.userId ?? payload?.login ?? payload?.username ?? profile?.userId) || "",
           email: payload?.email || "",
           mobileNumber: payload?.mobileNumber?.toString() || "",
         })
+        // Refresh user data in auth context to sync session storage
+        await refreshUser()
       }
       alerts.success("Profile Updated", "Your profile has been updated successfully")
       setIsEditing(false)
@@ -360,11 +359,11 @@ export default function Settings() {
     })
   }
 
-  const isLoading = loadingProfile || updateProfileMutation.isPending
+  const isLoading = authLoading || updateProfileMutation.isPending
   const isRequestingOtp = generateOtpMutation.isPending
   const isChangingPassword = changePasswordMutation.isPending
 
-  if (loadingProfile) {
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -374,12 +373,12 @@ export default function Settings() {
     )
   }
 
-  if (profileError) {
+  if (!user || !profile) {
     return (
       <Card className="p-6">
         <Alert variant="destructive">
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>Failed to load profile. Please refresh the page.</AlertDescription>
+          <AlertDescription>User profile not found. Please login again.</AlertDescription>
         </Alert>
       </Card>
     )
