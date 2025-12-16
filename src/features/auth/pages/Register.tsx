@@ -15,6 +15,14 @@ import { apiService } from "@/services/api"
 import { alerts } from "@/lib/alerts"
 import { cn } from "@/lib/utils"
 import { Spinner, LoadingOverlay } from "@/components/ui/spinner"
+import { useQuery } from "@tanstack/react-query"
+
+// Type for organization/organization type items
+type OrganizationItem = {
+  id: number
+  branchName: string
+  version?: number
+}
 
 export default function Register() {
   const navigate = useNavigate()
@@ -51,8 +59,6 @@ export default function Register() {
   const [roles, setRoles] = useState<Array<{id: number, name: string, accessLevel: number}>>([])
   const [loadingRoles, setLoadingRoles] = useState(false)
   const [open, setOpen] = useState(false)
-  const [organizations, setOrganizations] = useState<Array<{id: number, branchName: string, version?: number}>>([])
-  const [loadingOrganizations, setLoadingOrganizations] = useState(false)
   const [orgNameOpen, setOrgNameOpen] = useState(false)
   const [orgTypeOpen, setOrgTypeOpen] = useState(false)
 
@@ -67,9 +73,9 @@ export default function Register() {
   }
 
   // Returns branch name for a given organization id, or empty string
-  const getOrgBranchName = (id?: string) => {
-    if (!id) return ""
-    const match = organizations.find(o => o.id.toString() === id)
+  const getOrgBranchName = (id?: string, orgList?: OrganizationItem[]) => {
+    if (!id || !orgList) return ""
+    const match = orgList.find(o => o.id.toString() === id)
     return match?.branchName || ""
   }
 
@@ -95,32 +101,70 @@ export default function Register() {
     fetchRoles()
   }, [])
 
-  // Fetch organizations for dropdowns
-  useEffect(() => {
-    const fetchOrganizations = async () => {
-      setLoadingOrganizations(true)
-      try {
-        const data = await apiService.get('/organizations/organizations')
-        setOrganizations(data)
-      } catch (err) {
-        console.error("Failed to fetch organizations:", err)
-        alerts.error("Error", "Failed to load organizations. Please refresh the page.")
-      } finally {
-        setLoadingOrganizations(false)
-      }
-    }
+  // Fetch organization types using Perdix API with parent_branch_id: 999
+  const {
+    data: organizationTypes = [],
+    isLoading: loadingOrgTypes,
+  } = useQuery({
+    queryKey: ["organizationTypes"],
+    queryFn: async () => {
+      const response = await apiService.post("/perdix/query", {
+        identifier: "childBranch.list",
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: 999
+        },
+        skip_relogin: "yes"
+      })
+      // Extract results array and map branch_name to branchName for consistency
+      const results = (response as any)?.results || []
+      return results.map((item: any): OrganizationItem => ({
+        id: item.id,
+        branchName: item.branch_name || item.branchName,
+        version: item.version
+      }))
+    },
+  })
 
-    fetchOrganizations()
-  }, [])
+  // Fetch organizations based on selected organization type
+  const {
+    data: organizations = [],
+    isLoading: loadingOrganizations,
+  } = useQuery({
+    queryKey: ["organizations", orgFields.organizationTypeId],
+    queryFn: async () => {
+      if (!orgFields.organizationTypeId) {
+        return []
+      }
+      const response = await apiService.post("/perdix/query", {
+        identifier: "childBranch.list",
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: Number(orgFields.organizationTypeId)
+        },
+        skip_relogin: "yes"
+      })
+      // Extract results array and map branch_name to branchName for consistency
+      const results = (response as any)?.results || []
+      return results.map((item: any): OrganizationItem => ({
+        id: item.id,
+        branchName: item.branch_name || item.branchName,
+        version: item.version
+      }))
+    },
+    enabled: !!orgFields.organizationTypeId, // Only fetch when organization type is selected
+  })
 
   // Ensure conditional fields reflect org type when IDs are prefilled
   useEffect(() => {
     // If invitation gave explicit type text, keep it; otherwise infer
     if (!orgFields.organizationType) {
-      const label = getOrgBranchName(orgFields.organizationTypeId) || getOrgBranchName(orgFields.organizationId)
+      const label = getOrgBranchName(orgFields.organizationTypeId, organizationTypes) || getOrgBranchName(orgFields.organizationId, organizations)
       if (label) setOrgFields(prev => ({ ...prev, organizationType: inferOrgType(label) }))
     }
-  }, [organizations, orgFields.organizationType, orgFields.organizationTypeId, orgFields.organizationId])
+  }, [organizationTypes, organizations, orgFields.organizationType, orgFields.organizationTypeId, orgFields.organizationId])
 
   // Prefill via invitation token
   useEffect(() => {
@@ -200,11 +244,11 @@ export default function Register() {
       
       // Find the selected organization object from Organization select list
       const selectedOrganization = orgFields.organizationId 
-        ? organizations.find((o) => o.id.toString() === orgFields.organizationId)
+        ? organizations.find((o: OrganizationItem) => o.id.toString() === orgFields.organizationId)
         : undefined
       // Find the selected organization type object from Organization Type select list
       const selectedOrgType = orgFields.organizationTypeId
-        ? organizations.find((o) => o.id.toString() === orgFields.organizationTypeId)
+        ? organizationTypes.find((o: OrganizationItem) => o.id.toString() === orgFields.organizationTypeId)
         : undefined
       
       const payload = {
@@ -287,53 +331,60 @@ export default function Register() {
             <form className="space-y-4" onSubmit={handleSubmit}>
               {/* Grid layout to reduce scrolling */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Organization Name (ID-backed dropdown) */}
+                {/* Organization Type (ID-backed dropdown) */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="organizationId">Organization</Label>
-                  <Popover open={orgNameOpen} onOpenChange={setOrgNameOpen}>
+                  <Label htmlFor="organizationTypeId">Organization Type</Label>
+                  <Popover open={orgTypeOpen} onOpenChange={setOrgTypeOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
-                        aria-expanded={orgNameOpen}
+                        aria-expanded={orgTypeOpen}
                         className="w-full justify-between h-9"
-                        disabled={submitting || loadingOrganizations}
+                        disabled={submitting || loadingOrgTypes}
                       >
                         <div className="flex items-center text-gray-500 font-normal">
                           <UserCircle className="mr-3 h-4 w-4 text-gray-400" />
-                          {loadingOrganizations ? (
-                            <span className="flex items-center gap-2"><Spinner size={16} /> Loading organizations...</span>
-                          ) : orgFields.organizationId ? (
-                            organizations.find(o => o.id.toString() === orgFields.organizationId)?.branchName || "Select organization"
+                          {loadingOrgTypes ? (
+                            <span className="flex items-center gap-2"><Spinner size={16} /> Loading organization types...</span>
+                          ) : orgFields.organizationTypeId ? (
+                            organizationTypes.find((org: OrganizationItem) => org.id.toString() === orgFields.organizationTypeId)?.branchName || "Select organization type"
                           ) : (
-                            "Select organization"
+                            "Select organization type"
                           )}
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0">
-                      {loadingOrganizations ? (
-                        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organizations...</div>
+                      {loadingOrgTypes ? (
+                        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organization types...</div>
                       ) : (
                         <Command>
-                          <CommandInput placeholder="Search organizations..." />
+                          <CommandInput placeholder="Search organization types..." />
                           <CommandList>
-                            <CommandEmpty>No organization found.</CommandEmpty>
+                            <CommandEmpty>No organization type found.</CommandEmpty>
                             <CommandGroup>
-                              {organizations.map((org) => (
+                              {organizationTypes.map((org: OrganizationItem) => (
                                 <CommandItem
                                   key={org.id}
                                   value={org.branchName}
                                   onSelect={() => {
-                                    setOrgFields(prev => ({ ...prev, organizationId: org.id.toString() }))
-                                    setOrgNameOpen(false)
+                                    setOrgFields(prev => ({ 
+                                      ...prev, 
+                                      organizationTypeId: org.id.toString(),
+                                      // Clear organization selection when organization type changes
+                                      organizationId: "",
+                                      // also set a human-readable type for conditional UI
+                                      organizationType: inferOrgType(org.branchName)
+                                    }))
+                                    setOrgTypeOpen(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      orgFields.organizationId === org.id.toString() ? "opacity-100" : "opacity-0"
+                                      orgFields.organizationTypeId === org.id.toString() ? "opacity-100" : "opacity-0"
                                     )}
                                   />
                                   <div className="flex flex-col">
@@ -350,58 +401,57 @@ export default function Register() {
                   </Popover>
                 </div>
 
-                {/* Organization Type (ID-backed dropdown) */}
+                {/* Organization Name (ID-backed dropdown) */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="organizationTypeId">Organization Type</Label>
-                  <Popover open={orgTypeOpen} onOpenChange={setOrgTypeOpen}>
+                  <Label htmlFor="organizationId">Organization</Label>
+                  <Popover open={orgNameOpen} onOpenChange={setOrgNameOpen}>
                     <PopoverTrigger asChild>
                       <Button
                         variant="outline"
                         role="combobox"
-                        aria-expanded={orgTypeOpen}
+                        aria-expanded={orgNameOpen}
                         className="w-full justify-between h-9"
-                        disabled={submitting || loadingOrganizations}
+                        disabled={submitting || loadingOrganizations || !orgFields.organizationTypeId}
                       >
                         <div className="flex items-center text-gray-500 font-normal">
                           <UserCircle className="mr-3 h-4 w-4 text-gray-400" />
-                          {loadingOrganizations ? (
+                          {!orgFields.organizationTypeId ? (
+                            "Please select organization type first"
+                          ) : loadingOrganizations ? (
                             <span className="flex items-center gap-2"><Spinner size={16} /> Loading organizations...</span>
-                          ) : orgFields.organizationTypeId ? (
-                            organizations.find(o => o.id.toString() === orgFields.organizationTypeId)?.branchName || "Select organization type"
+                          ) : orgFields.organizationId ? (
+                            organizations.find((org: OrganizationItem) => org.id.toString() === orgFields.organizationId)?.branchName || "Select organization"
                           ) : (
-                            "Select organization type"
+                            "Select organization"
                           )}
                         </div>
                         <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-full p-0">
-                      {loadingOrganizations ? (
+                      {!orgFields.organizationTypeId ? (
+                        <div className="p-3 text-sm text-muted-foreground">Please select an organization type first</div>
+                      ) : loadingOrganizations ? (
                         <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organizations...</div>
                       ) : (
                         <Command>
-                          <CommandInput placeholder="Search organization types..." />
+                          <CommandInput placeholder="Search organizations..." />
                           <CommandList>
-                            <CommandEmpty>No organization type found.</CommandEmpty>
+                            <CommandEmpty>No organization found.</CommandEmpty>
                             <CommandGroup>
-                              {organizations.map((org) => (
+                              {organizations.map((org: OrganizationItem) => (
                                 <CommandItem
                                   key={org.id}
                                   value={org.branchName}
                                   onSelect={() => {
-                                    setOrgFields(prev => ({ 
-                                      ...prev, 
-                                      organizationTypeId: org.id.toString(),
-                                      // also set a human-readable type for conditional UI
-                                      organizationType: inferOrgType(org.branchName)
-                                    }))
-                                    setOrgTypeOpen(false)
+                                    setOrgFields(prev => ({ ...prev, organizationId: org.id.toString() }))
+                                    setOrgNameOpen(false)
                                   }}
                                 >
                                   <Check
                                     className={cn(
                                       "mr-2 h-4 w-4",
-                                      orgFields.organizationTypeId === org.id.toString() ? "opacity-100" : "opacity-0"
+                                      orgFields.organizationId === org.id.toString() ? "opacity-100" : "opacity-0"
                                     )}
                                   />
                                   <div className="flex flex-col">

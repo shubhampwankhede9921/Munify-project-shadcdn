@@ -26,6 +26,26 @@ import {
 } from "lucide-react"
 
 import { useAuth } from "@/contexts/auth-context"
+
+// Format currency with appropriate scale (Cr, L, K, or plain rupees)
+const formatCurrency = (amount: number): string => {
+  if (amount === 0) return "₹0"
+  
+  if (amount >= 10000000) {
+    // Crores (1 Cr = 10,000,000)
+    return `₹${(amount / 10000000).toFixed(2)}Cr`
+  } else if (amount >= 100000) {
+    // Lakhs (1 L = 100,000)
+    return `₹${(amount / 100000).toFixed(2)}L`
+  } else if (amount >= 1000) {
+    // Thousands (1 K = 1,000)
+    return `₹${(amount / 1000).toFixed(2)}K`
+  } else {
+    // Plain rupees
+    return `₹${amount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+  }
+}
+
 export default function ProjectsLive() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -458,9 +478,14 @@ export default function ProjectsLive() {
           const state = p.state
           const category = p.category
           const description = p.description
-          const currentFunding = Number(p.already_secured_funds || p.funding_raised || 0)
-          const fundRequired = Number(p.funding_requirement || 0)
-          const progress = fundRequired > 0 ? Math.min(100, Math.round((currentFunding / fundRequired) * 100)) : 0
+          const totalCommittedAmount = Number((p as any).total_committed_amount || 0)
+          const commitmentGap = p.commitment_gap != null ? Number(p.commitment_gap) : null
+          // Calculate progress: commitment_gap is the total funding target, total_committed_amount is what's raised
+          // Progress = (total_committed_amount / commitment_gap) * 100
+          // Example: If commitment_gap = 100 Cr and total_committed_amount = 50 Cr, then 50% is raised
+          const progress = commitmentGap !== null && !Number.isNaN(commitmentGap) && commitmentGap > 0
+            ? Math.min(100, Math.max(0, Math.round((totalCommittedAmount / commitmentGap) * 100)))
+            : 0
           const end = p.end_date ? new Date(p.end_date) : null
           const today = new Date()
           const msLeft = end ? end.getTime() - today.getTime() : 0
@@ -516,15 +541,47 @@ export default function ProjectsLive() {
                 </p>
                 
                 {/* Funding Progress */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Funding Progress</span>
-                    <span className="font-medium">{progress}%</span>
-                  </div>
-                  <Progress value={progress} className="h-2 bg-secondary" />
-                  <div className="flex items-center justify-between text-sm text-muted-foreground gap-2">
-                    <span className="whitespace-nowrap">₹{(currentFunding / 10000000).toFixed(1)}Cr raised</span>
-                    <span className="whitespace-nowrap">₹{(fundRequired / 10000000).toFixed(1)}Cr target</span>
+                <div className="space-y-3">
+                  {/* Funding Target - Highlighted */}
+                  {commitmentGap !== null && !Number.isNaN(commitmentGap) && commitmentGap > 0 && (
+                    <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded-md bg-blue-100 dark:bg-blue-900/50">
+                            <IndianRupee className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-medium text-blue-900 dark:text-blue-100">Funding Target</p>
+                            <p className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                              {formatCurrency(commitmentGap)}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="outline" className="bg-white/50 dark:bg-gray-800/50 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 font-semibold">
+                          Goal
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Progress Section */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Funding Progress</span>
+                      <span className="font-semibold text-foreground">{progress}%</span>
+                    </div>
+                    <Progress value={progress} className="h-2.5 bg-secondary" />
+                    <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span>{formatCurrency(totalCommittedAmount)} raised</span>
+                      </span>
+                      {commitmentGap !== null && !Number.isNaN(commitmentGap) && (
+                        <span className="text-muted-foreground/70">
+                          {formatCurrency(Math.max(0, commitmentGap - totalCommittedAmount))} remaining
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
                 
