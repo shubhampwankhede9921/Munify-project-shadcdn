@@ -56,6 +56,7 @@ import {
   FilePlus,
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
+import { FundingCommitmentDialog } from "@/features/projects/components/FundingCommitmentDialog"
 
 interface QuestionAnswer {
   id: number
@@ -157,6 +158,7 @@ console.log(user?.data?.login);
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
+  const [fundingDialogOpen, setFundingDialogOpen] = useState(false)
 
   // Fetch project data
   const { data, isLoading, error, isError } = useQuery<ProjectApiResponse>({
@@ -510,6 +512,20 @@ console.log(user?.data?.login);
   const handleCloseNoteDialog = () => {
     resetNoteForm()
     setIsNoteDialogOpen(false)
+  }
+
+  const handleOpenFundingDialog = () => {
+    if (projectReferenceId) {
+      setFundingDialogOpen(true)
+    }
+  }
+
+  const handleCloseFundingDialog = () => {
+    setFundingDialogOpen(false)
+    // Invalidate project query to refresh project details after commitment changes
+    if (id) {
+      queryClient.invalidateQueries({ queryKey: ['project', id] })
+    }
   }
 
   const createNoteMutation = useMutation({
@@ -1284,7 +1300,12 @@ console.log(user?.data?.login);
               <CardTitle>Funding Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Button className="w-full" size="lg">
+              <Button 
+                className="w-full" 
+                size="lg"
+                onClick={handleOpenFundingDialog}
+                disabled={!projectReferenceId}
+              >
                 <IndianRupee className="h-4 w-4 mr-2" />
                 Fund This Project
               </Button>
@@ -1592,6 +1613,13 @@ console.log(user?.data?.login);
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Funding Commitment Dialog */}
+      <FundingCommitmentDialog
+        open={fundingDialogOpen}
+        project_reference_id={projectReferenceId || null}
+        onClose={handleCloseFundingDialog}
+      />
     </div>
   )
 }

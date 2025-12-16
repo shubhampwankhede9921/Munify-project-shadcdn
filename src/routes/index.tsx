@@ -87,7 +87,8 @@ export const router = createBrowserRouter([
       { path: "admin/reports", element: <AdminReports /> },
       { path: "admin/commitments", element: <AdminCommitments /> },
       { path: "admin/commitments/:projectReferenceId", element: <AdminCommitmentDetails /> },
-      { path: "settings/:userId", element: <Settings /> },
+      // Settings page now reads user details from auth session (useAuth), so no route param is needed
+      { path: "settings", element: <Settings /> },
       { path: "demo", element: <Projects /> },
       { path: "designs/cards", element: <CardShowcase /> },
       { path: "components/datatable", element: <DataTableReference /> },

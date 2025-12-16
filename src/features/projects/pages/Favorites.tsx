@@ -20,6 +20,7 @@ import { apiService } from "@/services/api"
 import { alerts } from "@/lib/alerts"
 import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/contexts/auth-context"
+import { FundingCommitmentDialog } from "@/features/projects/components/FundingCommitmentDialog"
 
 interface FavoriteProject {
   id: number
@@ -73,6 +74,8 @@ export default function Favorites() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState("")
+  const [fundingDialogOpen, setFundingDialogOpen] = useState(false)
+  const [selectedProjectReferenceId, setSelectedProjectReferenceId] = useState<string | null>(null)
   const { user } = useAuth()
   const userId = user?.data?.login // TODO: Replace with auth user id
 
@@ -137,9 +140,16 @@ export default function Favorites() {
     navigate(`/main/projects/${projectId}#qa`)
   }
 
-  const handleFundProject = (projectId: number) => {
-    // Navigate to project details where funding flow can be initiated
-    navigate(`/main/projects/${projectId}`)
+  const handleFundProject = (projectReferenceId: string) => {
+    setSelectedProjectReferenceId(projectReferenceId)
+    setFundingDialogOpen(true)
+  }
+
+  const handleCloseFundingDialog = () => {
+    setFundingDialogOpen(false)
+    setSelectedProjectReferenceId(null)
+    // Invalidate favorites query to refresh the list after commitment changes
+    queryClient.invalidateQueries({ queryKey: ["favorite-projects", userId] })
   }
 
   // Remove project from favorites (align with ProjectsLive implementation)
@@ -356,7 +366,7 @@ export default function Favorites() {
                   <div className="flex space-x-2 pt-4">
                     <Button
                       className="flex-1"
-                      onClick={() => handleFundProject(id)}
+                      onClick={() => handleFundProject(p.project_reference_id)}
                       title="Fund Project"
                     >
                       <IndianRupee className="h-4 w-4 mr-2" />
@@ -395,6 +405,13 @@ export default function Favorites() {
           })}
         </div>
       )}
+
+      {/* Funding Commitment Dialog */}
+      <FundingCommitmentDialog
+        open={fundingDialogOpen}
+        project_reference_id={selectedProjectReferenceId}
+        onClose={handleCloseFundingDialog}
+      />
     </div>
   )
 }
