@@ -13,6 +13,10 @@ import {
   CheckCircle2, 
   X, 
   Clock, 
+  
+  
+  
+  
   AlertTriangle, 
   CheckCircle,
   Loader2,
@@ -29,6 +33,7 @@ import { useAuth } from "@/contexts/auth-context"
 interface Project {
   id: number
   title: string
+  project_reference_id?: string
   organization_id: string
   category: string
   project_stage: string
@@ -40,8 +45,19 @@ interface Project {
   funding_requirement?: number
   total_project_cost?: number
   already_secured_funds?: number
+  // Credit & overview
   municipality_credit_rating?: string
   municipality_credit_score?: number
+  funding_type?: string
+  commitment_allocation_days?: number
+  minimum_commitment_fulfilment_percentage?: number
+  mode_of_implementation?: string
+  ownership?: string
+  // Financial terms
+  tenure?: number
+  cut_off_rate_percentage?: number
+  minimum_commitment_amount?: number
+  conditions?: string
   start_date?: string
   end_date?: string
   fundraising_start_date?: string
@@ -63,7 +79,6 @@ export default function AdminProjectReview() {
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const [showRejectConfirm, setShowRejectConfirm] = useState(false)
 const { user } = useAuth()
-console.log(user?.data?.login);
   // Fetch project details
   const { data: project, isLoading, error, isError } = useQuery({
     queryKey: ['project', id],
@@ -86,7 +101,7 @@ console.log(user?.data?.login);
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['project', id] })
       alerts.success('Project Approved', 'The project has been approved successfully.')
-      navigate("/main/admin/projects/validate")
+      navigate("/main/admin/projects")
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to approve project.'
@@ -106,7 +121,7 @@ console.log(user?.data?.login);
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['project', id] })
       alerts.success('Project Rejected', 'The project has been rejected and sent back to the municipality.')
-      navigate("/main/admin/projects/validate")
+      navigate("/main/admin/projects")
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to reject project.'
@@ -210,7 +225,7 @@ console.log(user?.data?.login);
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Project Review</h1>
-          <Link to="/main/admin/projects/validate">
+          <Link to="/main/admin/projects">
             <Button variant="outline">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
@@ -244,7 +259,7 @@ console.log(user?.data?.login);
             Review project details and approve or reject the submission
           </p>
         </div>
-        <Link to="/main/admin/projects/validate">
+        <Link to="/main/admin/projects">
           <Button variant="outline">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Validation
@@ -269,7 +284,19 @@ console.log(user?.data?.login);
                 <Label className="text-muted-foreground">Project Title</Label>
                 <p className="font-semibold text-lg mt-1">{project.title}</p>
               </div>
+              {/* IDs */}
               <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Reference ID</Label>
+                  <p className="font-medium mt-1">{project.project_reference_id || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Organization ID</Label>
+                  <p className="font-medium mt-1">{project.organization_id || '—'}</p>
+                </div>
+              </div>
+              {/* Core classification */}
+              <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
                   <Label className="text-muted-foreground">Category</Label>
                   <p className="font-medium mt-1">{project.category || '—'}</p>
@@ -287,6 +314,40 @@ console.log(user?.data?.login);
                 <div>
                   <Label className="text-muted-foreground">Department</Label>
                   <p className="font-medium mt-1">{project.department || '—'}</p>
+                </div>
+              </div>
+              {/* Funding overview */}
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div>
+                  <Label className="text-muted-foreground">Funding Type</Label>
+                  <p className="font-medium mt-1">{project.funding_type || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Mode of Implementation</Label>
+                  <p className="font-medium mt-1">{project.mode_of_implementation || '—'}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Ownership</Label>
+                  <p className="font-medium mt-1">{project.ownership || '—'}</p>
+                </div>
+              </div>
+              {/* Commitment settings */}
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div>
+                  <Label className="text-muted-foreground">Commitment Allocation Days</Label>
+                  <p className="font-medium mt-1">
+                    {project.commitment_allocation_days != null
+                      ? `${project.commitment_allocation_days} days`
+                      : '—'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Minimum Commitment Fulfilment</Label>
+                  <p className="font-medium mt-1">
+                    {project.minimum_commitment_fulfilment_percentage != null
+                      ? `${project.minimum_commitment_fulfilment_percentage}%`
+                      : '—'}
+                  </p>
                 </div>
               </div>
               {project.description && (
@@ -347,6 +408,35 @@ console.log(user?.data?.login);
                   <p className="font-semibold text-lg mt-1">{formatCurrency(project.already_secured_funds)}</p>
                 </div>
               </div>
+              {/* Term sheet details */}
+              <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+                <div>
+                  <Label className="text-muted-foreground">Tenure</Label>
+                  <p className="font-medium mt-1">
+                    {project.tenure != null ? `${project.tenure} months` : '—'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Cut-off Rate</Label>
+                  <p className="font-medium mt-1">
+                    {project.cut_off_rate_percentage != null ? `${project.cut_off_rate_percentage}%` : '—'}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Minimum Acceptable Interest Rate</Label>
+                  <p className="font-medium mt-1">
+                    {project.cut_off_rate_percentage != null ? `${project.cut_off_rate_percentage}%` : '—'}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                  <Label className="text-muted-foreground">Minimum Commitment Amount</Label>
+                  <p className="font-semibold text-lg mt-1 text-blue-700">
+                    {formatCurrency(project.minimum_commitment_amount)}
+                  </p>
+                </div>
+              </div>
               {project.municipality_credit_rating && (
                 <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
                   <div>
@@ -359,6 +449,14 @@ console.log(user?.data?.login);
                       <p className="font-medium mt-1">{project.municipality_credit_score}</p>
                     </div>
                   )}
+                </div>
+              )}
+              {project.conditions && (
+                <div className="mt-4 pt-4 border-t">
+                  <Label className="text-muted-foreground">Conditions</Label>
+                  <p className="text-sm mt-1 text-muted-foreground whitespace-pre-wrap">
+                    {project.conditions}
+                  </p>
                 </div>
               )}
             </CardContent>

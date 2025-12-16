@@ -1139,17 +1139,6 @@ export default function CreateProject() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="projectReferenceId">Project Reference ID</Label>
-                <Input
-                  id="projectReferenceId"
-                  value={formData.projectReferenceId}
-                  disabled
-                  className="bg-muted"
-                />
-                <p className="text-xs text-muted-foreground">System-generated reference ID</p>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="municipalityId">Municipality *</Label>
                 <Select
                   value={formData.municipalityId}
