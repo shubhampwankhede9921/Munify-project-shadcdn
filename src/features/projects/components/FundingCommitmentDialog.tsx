@@ -90,6 +90,23 @@ export function FundingCommitmentDialog({
 
   const isWindowOpen = useMemo(() => isCommitmentWindowOpen(project), [project])
 
+  // Derive current user's commitment and its status (if any)
+  const currentCommitment = (project as any)?.commitment as
+    | {
+        id: number
+        amount?: string | number
+        interest_rate?: string | number
+        tenure_months?: number
+        terms_conditions_text?: string
+        funding_mode?: string
+        status?: string
+      }
+    | undefined
+
+  const commitmentStatus = currentCommitment?.status
+  const isCommitmentUnderReview =
+    !commitmentId || commitmentStatus?.toLowerCase() === "under_review"
+
   // When project (with optional commitment) is loaded, prefill form if commitment exists
   useEffect(() => {
     if (!project) {
@@ -98,14 +115,7 @@ export function FundingCommitmentDialog({
     }
 
     const commitment = (project as any).commitment as
-      | {
-          id: number
-          amount?: string | number
-          interest_rate?: string | number
-          tenure_months?: number
-          terms_conditions_text?: string
-          funding_mode?: string
-        }
+      | (typeof currentCommitment)
       | undefined
 
     if (!commitment) {
@@ -204,6 +214,9 @@ export function FundingCommitmentDialog({
       const hasExistingCommitment = Boolean(commitmentId)
 
       if (hasExistingCommitment && commitmentId) {
+        if (!isCommitmentUnderReview) {
+          throw new Error("You can update your commitment only while it is UNDER_REVIEW.")
+        }
         // Update existing commitment
         const updatePayload = {
           amount: parsedAmount,
@@ -219,8 +232,8 @@ export function FundingCommitmentDialog({
       // Create new commitment
       const createPayload = {
         project_reference_id: project.project_reference_id,
-        organization_type: "Lender",
-        organization_id: currentUserId,
+        organization_type: user?.data?.org_type,
+        organization_id: String(user.data.userBranches?.[1]?.branchId),
         committed_by: currentUserId,
         amount: parsedAmount,
         currency: "INR",
@@ -238,6 +251,7 @@ export function FundingCommitmentDialog({
       resetForm()
       onClose()
       queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
+      queryClient.invalidateQueries({ queryKey: ["project", "by-reference", project_reference_id] })
     },
     onError: (error: any) => {
       const message =
@@ -257,6 +271,10 @@ export function FundingCommitmentDialog({
     mutationFn: async () => {
       if (!commitmentId) {
         throw new Error("No commitment found to withdraw")
+      }
+
+      if (!isCommitmentUnderReview) {
+        throw new Error("You can withdraw your commitment only while it is UNDER_REVIEW.")
       }
 
       return apiService.post(`/commitments/${commitmentId}/withdraw`,{updated_by: currentUserId})
@@ -435,7 +453,7 @@ export function FundingCommitmentDialog({
 
         <DialogFooter className="px-6 py-4 border-t flex-shrink-0 bg-muted/30 gap-2 sm:justify-between">
           <div className="flex items-center gap-2">
-            {commitmentId && (
+            {commitmentId && isCommitmentUnderReview && (
               <Button
                 variant="destructive"
                 type="button"
@@ -461,29 +479,50 @@ export function FundingCommitmentDialog({
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              onClick={() => commitFundingMutation.mutate()}
-              disabled={
-                commitFundingMutation.isPending ||
-                withdrawCommitmentMutation.isPending ||
-                !isWindowOpen ||
-                isLoadingProject ||
-                !project
-              }
-              className="h-9 px-6"
-            >
-              {commitFundingMutation.isPending ? (
-                <Spinner className="mr-2" size={16} />
-              ) : (
-                <IndianRupee className="h-4 w-4 mr-2" />
-              )}
-              {commitFundingMutation.isPending
-                ? "Saving..."
-                : commitmentId
-                ? "Update Commitment"
-                : "Commit Funding"}
-            </Button>
+            {/* Show Commit button only when creating a new commitment */}
+            {!commitmentId && (
+              <Button
+                type="button"
+                onClick={() => commitFundingMutation.mutate()}
+                disabled={
+                  commitFundingMutation.isPending ||
+                  withdrawCommitmentMutation.isPending ||
+                  !isWindowOpen ||
+                  isLoadingProject ||
+                  !project
+                }
+                className="h-9 px-6"
+              >
+                {commitFundingMutation.isPending ? (
+                  <Spinner className="mr-2" size={16} />
+                ) : (
+                  <IndianRupee className="h-4 w-4 mr-2" />
+                )}
+                {commitFundingMutation.isPending ? "Saving..." : "Commit Funding"}
+              </Button>
+            )}
+            {/* Show Update button only when commitment is UNDER_REVIEW */}
+            {commitmentId && isCommitmentUnderReview && (
+              <Button
+                type="button"
+                onClick={() => commitFundingMutation.mutate()}
+                disabled={
+                  commitFundingMutation.isPending ||
+                  withdrawCommitmentMutation.isPending ||
+                  !isWindowOpen ||
+                  isLoadingProject ||
+                  !project
+                }
+                className="h-9 px-6"
+              >
+                {commitFundingMutation.isPending ? (
+                  <Spinner className="mr-2" size={16} />
+                ) : (
+                  <IndianRupee className="h-4 w-4 mr-2" />
+                )}
+                {commitFundingMutation.isPending ? "Saving..." : "Update Commitment"}
+              </Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
