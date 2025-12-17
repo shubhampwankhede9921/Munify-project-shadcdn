@@ -151,10 +151,17 @@ export default function ProjectDetails() {
   const [activeTab, setActiveTab] = useState("overview")
   const queryClient = useQueryClient()
 
-  // TODO: replace with real authenticated user from auth context
   const { user } = useAuth()
-console.log(user?.data?.login);
-  const currentUserId = user?.data?.login
+  const userData = user?.data
+  const currentUserId = userData?.login
+
+  // Treat municipality users (by org_type / userType / roleCode) as allowed to answer questions
+  const isMunicipalityUser =
+    typeof userData?.org_type === "string" && userData.org_type.toLowerCase() === "municipality"
+      ? true
+      : typeof userData?.userType === "string" && userData.userType.toLowerCase() === "municipality"
+        ? true
+        : typeof userData?.roleCode === "string" && userData.roleCode.toLowerCase().includes("municip")
   const [isNoteDialogOpen, setIsNoteDialogOpen] = useState(false)
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
@@ -195,14 +202,15 @@ console.log(user?.data?.login);
 
   // ---- Q&A: Dialog and form state ----
   const [isAskDialogOpen, setIsAskDialogOpen] = useState(false)
-  const [isAnswerDialogOpen, setIsAnswerDialogOpen] = useState(false)
   const [editingQuestion, setEditingQuestion] = useState<QuestionAnswer | null>(null)
-  const [answeringQuestion, setAnsweringQuestion] = useState<QuestionAnswer | null>(null)
 
   const [questionText, setQuestionText] = useState("")
   const [questionCategory, setQuestionCategory] = useState<string>("")
   const [questionPriority, setQuestionPriority] = useState<string>("normal")
 
+  // Municipality-only answer dialog state
+  const [isAnswerDialogOpen, setIsAnswerDialogOpen] = useState(false)
+  const [answeringQuestion, setAnsweringQuestion] = useState<QuestionAnswer | null>(null)
   const [answerText, setAnswerText] = useState("")
   const [answerDocumentLinks, setAnswerDocumentLinks] = useState("")
 
@@ -348,8 +356,13 @@ console.log(user?.data?.login);
     },
   })
 
+  // Municipality answer mutation (answer / edit answer for a question)
   const upsertAnswerMutation = useMutation({
     mutationFn: async () => {
+      if (!isMunicipalityUser) {
+        throw new Error("Only municipality users can answer questions")
+      }
+
       if (!projectReferenceId || !answeringQuestion) {
         throw new Error("No question selected for answer")
       }
@@ -393,32 +406,6 @@ console.log(user?.data?.login);
       setTimeout(() => {
         alerts.error("Error", message)
       }, 100)
-    },
-  })
-
-  const deleteAnswerMutation = useMutation({
-    mutationFn: async (question: QuestionAnswer) => {
-      if (!projectReferenceId) {
-        throw new Error("Missing project reference id")
-      }
-
-      const endpoint = `/questions/${question.id}/answer?project_id=${encodeURIComponent(
-        projectReferenceId,
-      )}&replied_by_user_id=${encodeURIComponent(currentUserId)}`
-
-      return await apiService.delete(endpoint)
-    },
-    onSuccess: () => {
-      alerts.success("Answer Deleted", "The answer has been deleted. Question is now open.")
-      queryClient.invalidateQueries({ queryKey: ['questions', { project_id: projectReferenceId }] })
-    },
-    onError: (error: any) => {
-      const message =
-        error?.response?.data?.detail ||
-        error?.response?.data?.message ||
-        error?.message ||
-        "Failed to delete answer. Please try again."
-      alerts.error("Error", message)
     },
   })
 
@@ -1204,27 +1191,20 @@ console.log(user?.data?.login);
                                         </Button>
                                       </>
                                     )}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        setAnsweringQuestion(qa)
-                                        const existingAnswer = getDisplayAnswer(qa)
-                                        setAnswerText(existingAnswer?.reply_text || "")
-                                        setAnswerDocumentLinks(existingAnswer?.document_links || "")
-                                        setIsAnswerDialogOpen(true)
-                                      }}
-                                    >
-                                      {hasAnswer ? "Edit Answer" : "Answer"}
-                                    </Button>
-                                    {hasAnswer && (
+
+                                    {isMunicipalityUser && (
                                       <Button
                                         variant="outline"
                                         size="sm"
-                                        onClick={() => deleteAnswerMutation.mutate(qa)}
-                                        disabled={deleteAnswerMutation.isPending}
+                                        onClick={() => {
+                                          setAnsweringQuestion(qa)
+                                          const existingAnswer = getDisplayAnswer(qa)
+                                          setAnswerText(existingAnswer?.reply_text || "")
+                                          setAnswerDocumentLinks(existingAnswer?.document_links || "")
+                                          setIsAnswerDialogOpen(true)
+                                        }}
                                       >
-                                        Delete Answer
+                                        {hasAnswer ? "Edit Answer" : "Answer"}
                                       </Button>
                                     )}
                                   </div>
@@ -1390,7 +1370,7 @@ console.log(user?.data?.login);
                 <div className="text-center p-4 border rounded-lg">
                   <div className="text-3xl font-bold text-green-600 mb-1">
                     {project.municipality_credit_rating || "N/A"}
-                  </div>
+                  </div> 
                   <div className="text-sm text-muted-foreground">Credit Rating</div>
                   {project.municipality_credit_score && (
                     <div className="text-xs text-muted-foreground mt-1">
@@ -1546,73 +1526,75 @@ console.log(user?.data?.login);
         </DialogContent>
       </Dialog>
 
-      {/* Q&A: Answer Dialog */}
-      <Dialog
-        open={isAnswerDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            resetAnswerForm()
-          }
-          setIsAnswerDialogOpen(open)
-        }}
-      >
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>
-              {getDisplayAnswer(answeringQuestion)
-                ? "Edit Answer"
-                : "Answer Question"}
-            </DialogTitle>
-            <DialogDescription>
-              Provide a single authoritative answer for this question.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Question</Label>
-              <p className="text-sm text-muted-foreground">
-                {answeringQuestion?.question_text}
-              </p>
+      {/* Municipality-only: Answer Question Dialog */}
+      {isMunicipalityUser && (
+        <Dialog
+          open={isAnswerDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              resetAnswerForm()
+            }
+            setIsAnswerDialogOpen(open)
+          }}
+        >
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>
+                {getDisplayAnswer(answeringQuestion)
+                  ? "Edit Answer"
+                  : "Answer Question"}
+              </DialogTitle>
+              <DialogDescription>
+                Provide a single authoritative answer for this question.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-1.5">
+                <Label>Question</Label>
+                <p className="text-sm text-muted-foreground">
+                  {answeringQuestion?.question_text}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="answer-text">Answer *</Label>
+                <Textarea
+                  id="answer-text"
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                  placeholder="Enter your answer for this question"
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="answer-doc-links">Document links (optional)</Label>
+                <Input
+                  id="answer-doc-links"
+                  value={answerDocumentLinks}
+                  onChange={(e) => setAnswerDocumentLinks(e.target.value)}
+                  placeholder="https://example.com/answer-details"
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="answer-text">Answer *</Label>
-              <Textarea
-                id="answer-text"
-                value={answerText}
-                onChange={(e) => setAnswerText(e.target.value)}
-                placeholder="Enter your answer for this question"
-                rows={4}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="answer-doc-links">Document links (optional)</Label>
-              <Input
-                id="answer-doc-links"
-                value={answerDocumentLinks}
-                onChange={(e) => setAnswerDocumentLinks(e.target.value)}
-                placeholder="https://example.com/answer-details"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                resetAnswerForm()
-                setIsAnswerDialogOpen(false)
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => upsertAnswerMutation.mutate()}
-              disabled={upsertAnswerMutation.isPending}
-            >
-              {upsertAnswerMutation.isPending ? "Saving..." : "Save Answer"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  resetAnswerForm()
+                  setIsAnswerDialogOpen(false)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => upsertAnswerMutation.mutate()}
+                disabled={upsertAnswerMutation.isPending}
+              >
+                {upsertAnswerMutation.isPending ? "Saving..." : "Save Answer"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Funding Commitment Dialog */}
       <FundingCommitmentDialog

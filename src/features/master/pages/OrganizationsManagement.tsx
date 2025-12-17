@@ -205,9 +205,8 @@ export default function OrganizationsManagement() {
       cashLimit: organization.cashLimit,
       fingerPrintDeviceType: organization.fingerPrintDeviceType
     })
-    // Find the organization name for the selected parent branch ID
-    const parentOrg = organizations.find(org => org.id === organization.parentBranchId)
-    setSelectedOrgType(parentOrg ? `${parentOrg.id}-${parentOrg.branchName}` : '')
+    // Use parentBranchId from the response for validation in edit flow
+    setSelectedOrgType(organization.parentBranchId ? String(organization.parentBranchId) : '')
     setIsEditDialogOpen(true)
   }
 
@@ -477,52 +476,9 @@ export default function OrganizationsManagement() {
                 <Label htmlFor="editParentBranchId" className="text-sm font-medium">
                   Organization Type *
                 </Label>
-                <Popover open={orgTypeOpen} onOpenChange={setOrgTypeOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      aria-expanded={orgTypeOpen}
-                      className="w-full justify-between h-10"
-                      disabled={submitting}
-                    >
-                      <div className="flex items-center text-gray-500 font-normal">
-                        <Building2 className="mr-3 h-4 w-4 text-gray-400" />
-                        {selectedOrgType
-                          ? organizations.find((org) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
-                          : "Select organization type"}
-                      </div>
-                      <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search organization types..." />
-                      <CommandList>
-                        <CommandEmpty>No organization type found.</CommandEmpty>
-                        <CommandGroup>
-                          {organizations.map((org) => (
-                            <CommandItem
-                              key={org.id}
-                              value={org.branchName}
-                              onSelect={() => handleOrgTypeChange(`${org.id}-${org.branchName}`)}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
-                                }`}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{org.branchName}</span>
-                                <span className="text-xs text-muted-foreground">ID: {org.id}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <div className="h-10 px-3 py-2 text-sm bg-muted rounded-md border flex items-center">
+                  {editingOrganization?.parentBranchId ?? '-'}
+                </div>
               </div>
 
               <div className="space-y-2">
