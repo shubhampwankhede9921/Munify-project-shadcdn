@@ -56,8 +56,6 @@ export default function Register() {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [roles, setRoles] = useState<Array<{id: number, name: string, accessLevel: number}>>([])
-  const [loadingRoles, setLoadingRoles] = useState(false)
   const [open, setOpen] = useState(false)
   const [orgNameOpen, setOrgNameOpen] = useState(false)
   const [orgTypeOpen, setOrgTypeOpen] = useState(false)
@@ -83,29 +81,35 @@ export default function Register() {
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
-  // Fetch roles on component mount
-  useEffect(() => {
-    const fetchRoles = async () => {
-      setLoadingRoles(true)
-      try {
-        const rolesData = await apiService.get("/master/roles")
-        setRoles(rolesData)
-      } catch (err) {
-        console.error("Failed to fetch roles:", err)
-        alerts.error("Error", "Failed to load user roles. Please refresh the page.")
-      } finally {
-        setLoadingRoles(false)
-      }
-    }
+  // Fetch roles using React Query for consistency
+  const {
+    data: roles = [],
+    isLoading: loadingRoles,
+    error: rolesError,
+    isError: isRolesError,
+  } = useQuery<Array<{id: number, name: string, accessLevel: number}>>({
+    queryKey: ["roles"],
+    queryFn: async () => {
+      const rolesData = await apiService.get("/master/roles")
+      return rolesData as Array<{id: number, name: string, accessLevel: number}>
+    },
+  })
 
-    fetchRoles()
-  }, [])
+  // Handle roles error
+  useEffect(() => {
+    if (isRolesError && rolesError) {
+      const message = (rolesError as any)?.response?.data?.error || (rolesError as any)?.message || "Failed to load user roles. Please refresh the page."
+      alerts.error("Error", message)
+    }
+  }, [isRolesError, rolesError])
 
   // Fetch organization types using Perdix API with parent_branch_id: 999
   const {
     data: organizationTypes = [],
     isLoading: loadingOrgTypes,
-  } = useQuery({
+    error: orgTypesError,
+    isError: isOrgTypesError,
+  } = useQuery<OrganizationItem[]>({
     queryKey: ["organizationTypes"],
     queryFn: async () => {
       const response = await apiService.post("/perdix/query", {
@@ -116,6 +120,8 @@ export default function Register() {
           parent_branch_id: 999
         },
         skip_relogin: "yes"
+      }, {
+        usePerdixTimeout: true // Use extended timeout for Perdix queries
       })
       // Extract results array and map branch_name to branchName for consistency
       const results = (response as any)?.results || []
@@ -127,11 +133,21 @@ export default function Register() {
     },
   })
 
+  // Handle organization types error
+  useEffect(() => {
+    if (isOrgTypesError && orgTypesError) {
+      const message = (orgTypesError as any)?.response?.data?.error || (orgTypesError as any)?.message || "Failed to load organization types. Please try again."
+      alerts.error("Error", message)
+    }
+  }, [isOrgTypesError, orgTypesError])
+
   // Fetch organizations based on selected organization type
   const {
     data: organizations = [],
     isLoading: loadingOrganizations,
-  } = useQuery({
+    error: organizationsError,
+    isError: isOrganizationsError,
+  } = useQuery<OrganizationItem[]>({
     queryKey: ["organizations", orgFields.organizationTypeId],
     queryFn: async () => {
       if (!orgFields.organizationTypeId) {
@@ -145,6 +161,8 @@ export default function Register() {
           parent_branch_id: Number(orgFields.organizationTypeId)
         },
         skip_relogin: "yes"
+      }, {
+        usePerdixTimeout: true // Use extended timeout for Perdix queries
       })
       // Extract results array and map branch_name to branchName for consistency
       const results = (response as any)?.results || []
@@ -157,6 +175,14 @@ export default function Register() {
     enabled: !!orgFields.organizationTypeId, // Only fetch when organization type is selected
   })
 
+  // Handle organizations error
+  useEffect(() => {
+    if (isOrganizationsError && organizationsError) {
+      const message = (organizationsError as any)?.response?.data?.error || (organizationsError as any)?.message || "Failed to load organizations. Please try again."
+      alerts.error("Error", message)
+    }
+  }, [isOrganizationsError, organizationsError])
+
   // Ensure conditional fields reflect org type when IDs are prefilled
   useEffect(() => {
     // If invitation gave explicit type text, keep it; otherwise infer
@@ -166,40 +192,56 @@ export default function Register() {
     }
   }, [organizationTypes, organizations, orgFields.organizationType, orgFields.organizationTypeId, orgFields.organizationId])
 
-  // Prefill via invitation token
+  // Prefill via invitation token with request cancellation
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const token = params.get("token")
     if (!token) return
 
+    const abortController = new AbortController()
+
     const prefillFromInvitation = async () => {
       try {
-        const data = await apiService.get(`/invitations/validate/${token}`)
-        setForm(prev => ({
-          ...prev,
-          userName: (data?.full_name || "").toString(),
-          login: (data?.user_id || "").toString(),
-          email: (data?.email || "").toString(),
-          mobileNumber: (data?.mobile_number || "").toString(),
-          roleId: data?.role_id ? String(data.role_id) : prev.roleId,
-        }))
-        setOrgFields(prev => ({
-          ...prev,
-          // IDs for controlled dropdown selection
-          organizationId: data?.organization_id ? String(data.organization_id) : prev?.organizationId,
-          organizationTypeId: data?.organization_type_id ? String(data.organization_type_id) : prev?.organizationTypeId,
-          // Keep names for display/backward compatibility if needed
-          organizationName: (data?.organization_name || "").toString(),
-          organizationType: (data?.organization_type || "").toString(),
-        }))
-        // If backend didn't send readable type, the effect above will infer once organizations load
+        const data = await apiService.get(`/invitations/validate/${token}`, undefined, {
+          signal: abortController.signal
+        })
+        // Only update state if component is still mounted and request wasn't aborted
+        if (!abortController.signal.aborted) {
+          setForm(prev => ({
+            ...prev,
+            userName: (data?.full_name || "").toString(),
+            login: (data?.user_id || "").toString(),
+            email: (data?.email || "").toString(),
+            mobileNumber: (data?.mobile_number || "").toString(),
+            roleId: data?.role_id ? String(data.role_id) : prev.roleId,
+          }))
+          setOrgFields(prev => ({
+            ...prev,
+            // IDs for controlled dropdown selection
+            organizationId: data?.organization_id ? String(data.organization_id) : prev?.organizationId,
+            organizationTypeId: data?.organization_type_id ? String(data.organization_type_id) : prev?.organizationTypeId,
+            // Keep names for display/backward compatibility if needed
+            organizationName: (data?.organization_name || "").toString(),
+            organizationType: (data?.organization_type || "").toString(),
+          }))
+          // If backend didn't send readable type, the effect above will infer once organizations load
+        }
       } catch (err: any) {
+        // Don't show error if request was aborted (component unmounted)
+        if (err.name === 'AbortError' || abortController.signal.aborted) {
+          return
+        }
         const message = err?.response?.data?.error || err?.message || "Invalid or expired invitation link."
         alerts.error("Invitation Error", message)
       }
     }
 
     prefillFromInvitation()
+
+    // Cleanup: abort request if component unmounts
+    return () => {
+      abortController.abort()
+    }
   }, [])
 
   const validate = () => {
@@ -663,101 +705,6 @@ export default function Register() {
                   </div>
                 </div>
               </div>
-
-              {/* Organization-type based additional fields (optional legacy display) */}
-              {(() => {
-                const orgType = (orgFields.organizationType || "").toLowerCase()
-                if (orgType === "lender") {
-                  return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="designation">Designation</Label>
-                        <Input
-                          id="designation"
-                          type="text"
-                          placeholder="Enter designation"
-                          value={orgFields.designation}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, designation: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      
-                      <div className="space-y-1.5 md:col-span-2">
-                        <Label htmlFor="regNo">Regulatory Registration No.</Label>
-                        <Input
-                          id="regNo"
-                          type="text"
-                          placeholder="RBI code / CIN / PAN"
-                          value={orgFields.regulatoryRegistrationNo}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, regulatoryRegistrationNo: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      {/* KYC Upload placeholder (UI only for now) */}
-                      <div className="space-y-1.5 md:col-span-2">
-                        <Label>KYC Document Upload</Label>
-                        <div className="text-xs text-muted-foreground">PAN, GST, Certificate of Incorporation (upload coming soon)</div>
-                      </div>
-                    </div>
-                  )
-                }
-                if (orgType === "municipality") {
-                  return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div className="space-y-1.5 md:col-span-2">
-                        <Label htmlFor="municipalityName">Municipality Name</Label>
-                        <Input
-                          id="municipalityName"
-                          type="text"
-                          placeholder="Enter Municipality / ULB Name"
-                          value={orgFields.organizationName}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, organizationName: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="stateDistrict">State / District</Label>
-                        <Input
-                          id="stateDistrict"
-                          type="text"
-                          placeholder="State / District"
-                          value={orgFields.municipalityStateDistrict}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, municipalityStateDistrict: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="gstnUlb">GSTN / ULB Code</Label>
-                        <Input
-                          id="gstnUlb"
-                          type="text"
-                          placeholder="Optional"
-                          value={orgFields.gstnOrUlbCode}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, gstnOrUlbCode: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      <div className="space-y-1.5 md:col-span-2">
-                        <Label htmlFor="annualBudget">Annual Budget Size</Label>
-                        <Input
-                          id="annualBudget"
-                          type="text"
-                          placeholder="e.g., ₹500 Cr"
-                          value={orgFields.annualBudgetSize}
-                          onChange={(e) => setOrgFields(prev => ({ ...prev, annualBudgetSize: e.target.value }))}
-                          disabled={submitting}
-                        />
-                      </div>
-                      {/* KYC Upload placeholder (UI only for now) */}
-                      <div className="space-y-1.5 md:col-span-2">
-                        <Label>KYC Document Upload</Label>
-                        <div className="text-xs text-muted-foreground">Govt ID of Commissioner, Municipal Registration Certificate (upload coming soon)</div>
-                      </div>
-                    </div>
-                  )
-                }
-                return null
-              })()}
 
               {/* Terms and Submit */}
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-1">

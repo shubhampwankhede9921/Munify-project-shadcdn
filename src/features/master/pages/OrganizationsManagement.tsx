@@ -10,10 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Check, ChevronDown } from 'lucide-react'
+import { Check, ChevronDown, File, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import apiService from '@/services/api'
 import { alerts } from '@/lib/alerts'
 import { toast } from '@/hooks/use-toast'
+import { Spinner } from '@/components/ui/spinner'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Organization {
   id: number
@@ -28,6 +31,12 @@ interface Organization {
   fingerPrintDeviceType: string
 }
 
+type OrganizationItem = {
+  id: number
+  branchName: string
+  version?: number
+}
+
 type OrganizationForm = {
   bankId: number
   parentBranchId: number
@@ -37,6 +46,17 @@ type OrganizationForm = {
   branchOpenDate: string
   cashLimit: number
   fingerPrintDeviceType: string
+  // Conditional fields for Lender
+  lenderType?: string // Bank, NBFC, Multilateral, Philanthropy, Other
+  panNumber?: string
+  gstNumber?: string
+  panDocument?: File | null
+  gstDocument?: File | null
+  // Conditional fields for Municipality
+  state?: string
+  district?: string
+  panDocumentMunicipality?: File | null
+  gstDocumentMunicipality?: File | null
 }
 
 export default function OrganizationsManagement() {
@@ -53,17 +73,70 @@ export default function OrganizationsManagement() {
     pinCode: '',
     branchOpenDate: '',
     cashLimit: 0,
-    fingerPrintDeviceType: 'SAGEM'
+    fingerPrintDeviceType: 'SAGEM',
+    lenderType: '',
+    panNumber: '',
+    gstNumber: '',
+    panDocument: null,
+    gstDocument: null,
+    state: '',
+    district: '',
+    panDocumentMunicipality: null,
+    gstDocumentMunicipality: null
   })
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [selectedOrgType, setSelectedOrgType] = useState<string>('')
   const [orgTypeOpen, setOrgTypeOpen] = useState(false)
 
+  // Fetch organization types using Perdix API with parent_branch_id: 999
+  const {
+    data: organizationTypes = [],
+    isLoading: loadingOrgTypes,
+  } = useQuery({
+    queryKey: ["organizationTypes"],
+    queryFn: async () => {
+      const response = await apiService.post("/perdix/query", {
+        identifier: "childBranch.list",
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: 999
+        },
+        skip_relogin: "yes"
+      }, {
+        usePerdixTimeout: true
+      })
+      // Extract results array and map branch_name to branchName for consistency
+      const results = (response as any)?.results || []
+      return results.map((item: any): OrganizationItem => ({
+        id: item.id,
+        branchName: item.branch_name || item.branchName,
+        version: item.version
+      }))
+    },
+  })
+
   // Fetch organizations on component mount
   useEffect(() => {
     fetchOrganizations()
   }, [])
+
+  // Update selectedOrgType when organizationTypes loads and we're editing
+  useEffect(() => {
+    if (editingOrganization && organizationTypes.length > 0 && isEditDialogOpen) {
+      const parentOrgType = organizationTypes.find((org: OrganizationItem) => org.id === editingOrganization.parentBranchId)
+      if (parentOrgType) {
+        const orgTypeValue = `${parentOrgType.id}-${parentOrgType.branchName}`
+        // Only update if it's different to avoid unnecessary re-renders
+        if (selectedOrgType !== orgTypeValue) {
+          setSelectedOrgType(orgTypeValue)
+          // Also update formData.parentBranchId to ensure consistency
+          setFormData(prev => ({ ...prev, parentBranchId: parentOrgType.id }))
+        }
+      }
+    }
+  }, [organizationTypes, editingOrganization, isEditDialogOpen])
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -106,12 +179,75 @@ export default function OrganizationsManagement() {
         return
       }
 
-      // Convert pinCode to number for API call
-      const apiData = {
+      // Validate conditional fields based on organization type
+      if (isLenderType()) {
+        if (!formData.lenderType) {
+          toast({ title: 'Validation Error', description: 'Type of Lender is required', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.panNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'PAN Number is required for Lender', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.gstNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'GST Number is required for Lender', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+      }
+      
+      if (isMunicipalityType()) {
+        if (!formData.state?.trim()) {
+          toast({ title: 'Validation Error', description: 'State is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.district?.trim()) {
+          toast({ title: 'Validation Error', description: 'District is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.panNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'PAN Number is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.gstNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'GST Number is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Convert pinCode to number and prepare API data
+      const apiData: any = {
         ...formData,
         pinCode: parseInt(formData.pinCode)
       }
-      await apiService.post('/organizations/organizations', apiData)
+      
+      // Remove file objects from API data (files should be handled separately via FormData if needed)
+      delete apiData.panDocument
+      delete apiData.gstDocument
+      delete apiData.panDocumentMunicipality
+      delete apiData.gstDocumentMunicipality
+      
+      // Add conditional fields only if they exist
+      if (isLenderType()) {
+        apiData.lenderType = formData.lenderType
+        apiData.panNumber = formData.panNumber
+        apiData.gstNumber = formData.gstNumber
+      }
+      
+      if (isMunicipalityType()) {
+        apiData.state = formData.state
+        apiData.district = formData.district
+        apiData.panNumber = formData.panNumber
+        apiData.gstNumber = formData.gstNumber
+      }
+      
+      await apiService.post('/organizations/create', apiData)
       alerts.success("Success", "Organization created successfully")
       setIsCreateDialogOpen(false)
       resetForm()
@@ -155,14 +291,81 @@ export default function OrganizationsManagement() {
         return
       }
 
+      // Validate conditional fields based on organization type
+      if (isLenderType()) {
+        if (!formData.lenderType) {
+          toast({ title: 'Validation Error', description: 'Type of Lender is required', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.panNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'PAN Number is required for Lender', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.gstNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'GST Number is required for Lender', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+      }
+      
+      if (isMunicipalityType()) {
+        if (!formData.state?.trim()) {
+          toast({ title: 'Validation Error', description: 'State is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.district?.trim()) {
+          toast({ title: 'Validation Error', description: 'District is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.panNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'PAN Number is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+        if (!formData.gstNumber?.trim()) {
+          toast({ title: 'Validation Error', description: 'GST Number is required for Municipality', variant: 'destructive' })
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Extract parentBranchId from selectedOrgType to ensure it's correct
+      const parentBranchId = selectedOrgType ? parseInt(selectedOrgType.split('-')[0]) : formData.parentBranchId
+      
       // Convert pinCode to number and include id and version for API call
-      const apiData = {
+      const apiData: any = {
         ...formData,
         id: editingOrganization.id,
         version: editingOrganization.version,
         pinCode: parseInt(formData.pinCode),
-        bankId: 1
+        bankId: 1,
+        parentBranchId: parentBranchId // Ensure parentBranchId is patched from selectedOrgType
       }
+      
+      // Remove file objects from API data (files should be handled separately via FormData if needed)
+      delete apiData.panDocument
+      delete apiData.gstDocument
+      delete apiData.panDocumentMunicipality
+      delete apiData.gstDocumentMunicipality
+      
+      // Add conditional fields only if they exist
+      if (isLenderType()) {
+        apiData.lenderType = formData.lenderType
+        apiData.panNumber = formData.panNumber
+        apiData.gstNumber = formData.gstNumber
+      }
+      
+      if (isMunicipalityType()) {
+        apiData.state = formData.state
+        apiData.district = formData.district
+        apiData.panNumber = formData.panNumber
+        apiData.gstNumber = formData.gstNumber
+      }
+      
       await apiService.put(`/organizations/organizations`, apiData)
       alerts.success("Success", "Organization updated successfully")
       setIsEditDialogOpen(false)
@@ -187,13 +390,22 @@ export default function OrganizationsManagement() {
       pinCode: '',
       branchOpenDate: '',
       cashLimit: 0,
-      fingerPrintDeviceType: 'SAGEM'
+      fingerPrintDeviceType: 'SAGEM',
+      lenderType: '',
+      panNumber: '',
+      gstNumber: '',
+      panDocument: null,
+      gstDocument: null,
+      state: '',
+      district: '',
+      panDocumentMunicipality: null,
+      gstDocumentMunicipality: null
     })
     setSelectedOrgType('')
     setOrgTypeOpen(false)
   }
 
-  const openEditDialog = (organization: Organization) => {
+  const openEditDialog = async (organization: Organization) => {
     setEditingOrganization(organization)
     setFormData({
       bankId: organization.bankId,
@@ -203,11 +415,45 @@ export default function OrganizationsManagement() {
       pinCode: organization.pinCode.toString(),
       branchOpenDate: organization.branchOpenDate,
       cashLimit: organization.cashLimit,
-      fingerPrintDeviceType: organization.fingerPrintDeviceType
+      fingerPrintDeviceType: organization.fingerPrintDeviceType,
+      lenderType: '',
+      panNumber: '',
+      gstNumber: '',
+      panDocument: null,
+      gstDocument: null,
+      state: '',
+      district: '',
+      panDocumentMunicipality: null,
+      gstDocumentMunicipality: null
     })
-    // Find the organization name for the selected parent branch ID
-    const parentOrg = organizations.find(org => org.id === organization.parentBranchId)
-    setSelectedOrgType(parentOrg ? `${parentOrg.id}-${parentOrg.branchName}` : '')
+    // Find the organization type for the selected parent branch ID
+    // If organizationTypes is loaded, set it immediately, otherwise useEffect will handle it
+    if (organizationTypes.length > 0) {
+      const parentOrgType = organizationTypes.find((org: OrganizationItem) => org.id === organization.parentBranchId)
+      setSelectedOrgType(parentOrgType ? `${parentOrgType.id}-${parentOrgType.branchName}` : '')
+    } else {
+      // Reset selectedOrgType, useEffect will set it when organizationTypes loads
+      setSelectedOrgType('')
+    }
+    
+    // Fetch organization details to populate conditional fields
+    try {
+      const orgDetails: any = await apiService.get(`/organizations/org-details/${organization.id}`)
+      
+      // Update form data with the fetched organization details
+      setFormData(prev => ({
+        ...prev,
+        panNumber: orgDetails.panNumber || '',
+        gstNumber: orgDetails.gstNumber || '',
+        lenderType: orgDetails.typeOfLender || '',
+        state: orgDetails.state || '',
+        district: orgDetails.district || ''
+      }))
+    } catch (err) {
+      console.error('Error fetching organization details:', err)
+      // Continue with opening the dialog even if details fetch fails
+    }
+    
     setIsEditDialogOpen(true)
   }
 
@@ -224,6 +470,37 @@ export default function OrganizationsManagement() {
     const orgId = parseInt(value.split('-')[0])
     setFormData({ ...formData, parentBranchId: orgId })
     setOrgTypeOpen(false)
+  }
+
+  // Helper function to check if selected organization type is Lender
+  const isLenderType = () => {
+    if (!selectedOrgType) return false
+    const orgName = selectedOrgType.split('-').slice(1).join('-').toLowerCase()
+    return orgName.includes('lender')
+  }
+
+  // Helper function to check if selected organization type is Municipality
+  const isMunicipalityType = () => {
+    if (!selectedOrgType) return false
+    const orgName = selectedOrgType.split('-').slice(1).join('-').toLowerCase()
+    return orgName.includes('municipality')
+  }
+
+  // Helper function to format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file change
+  const handleFileChange = (
+    field: 'panDocument' | 'gstDocument' | 'panDocumentMunicipality' | 'gstDocumentMunicipality', 
+    file: File | null
+  ) => {
+    setFormData(prev => ({ ...prev, [field]: file }))
   }
 
   const columns: ColumnDef<Organization, any>[] = useMemo(() => [
@@ -303,43 +580,49 @@ export default function OrganizationsManagement() {
                       role="combobox"
                       aria-expanded={orgTypeOpen}
                       className="w-full justify-between h-10"
-                      disabled={submitting}
+                      disabled={submitting || loadingOrgTypes}
                     >
                       <div className="flex items-center text-gray-500 font-normal">
                         <Building2 className="mr-3 h-4 w-4 text-gray-400" />
-                        {selectedOrgType
-                          ? organizations.find((org) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
+                        {loadingOrgTypes ? (
+                          <span className="flex items-center gap-2"><Spinner size={16} /> Loading organization types...</span>
+                        ) : selectedOrgType
+                          ? organizationTypes.find((org: OrganizationItem) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
                           : "Select organization type"}
                       </div>
                       <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search organization types..." />
-                      <CommandList>
-                        <CommandEmpty>No organization type found.</CommandEmpty>
-                        <CommandGroup>
-                          {organizations.map((org) => (
-                            <CommandItem
-                              key={org.id}
-                              value={org.branchName}
-                              onSelect={() => handleOrgTypeChange(`${org.id}-${org.branchName}`)}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
-                                }`}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{org.branchName}</span>
-                                <span className="text-xs text-muted-foreground">ID: {org.id}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
+                    {loadingOrgTypes ? (
+                      <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organization types...</div>
+                    ) : (
+                      <Command>
+                        <CommandInput placeholder="Search organization types..." />
+                        <CommandList>
+                          <CommandEmpty>No organization type found.</CommandEmpty>
+                          <CommandGroup>
+                            {organizationTypes.map((org: OrganizationItem) => (
+                              <CommandItem
+                                key={org.id}
+                                value={org.branchName}
+                                onSelect={() => handleOrgTypeChange(`${org.id}-${org.branchName}`)}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${
+                                    selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
+                                  }`}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{org.branchName}</span>
+                                  <span className="text-xs text-muted-foreground">ID: {org.id}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>
@@ -405,6 +688,300 @@ export default function OrganizationsManagement() {
                   />
                 </div>
               </div>
+
+              {/* Conditional Fields for Lender */}
+              {isLenderType() && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-sm font-semibold text-gray-900">Lender Details</h3>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="lenderType" className="text-sm font-medium">
+                      Type of Lender *
+                    </Label>
+                    <Select
+                      value={formData.lenderType}
+                      onValueChange={(value) => setFormData({ ...formData, lenderType: value })}
+                      disabled={submitting}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select type of lender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Bank">Bank</SelectItem>
+                        <SelectItem value="NBFC">NBFC</SelectItem>
+                        <SelectItem value="Multilateral">Multilateral</SelectItem>
+                        <SelectItem value="Philanthropy">Philanthropy</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="panNumber" className="text-sm font-medium">
+                        PAN Number *
+                      </Label>
+                      <Input
+                        id="panNumber"
+                        value={formData.panNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gstNumber" className="text-sm font-medium">
+                        GST Number *
+                      </Label>
+                      <Input
+                        id="gstNumber"
+                        value={formData.gstNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter GST number"
+                        maxLength={15}
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="panDocument" className="text-sm font-medium">
+                        PAN Document Upload *
+                      </Label>
+                      <Input
+                        id="panDocument"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('panDocument', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.panDocument && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.panDocument.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.panDocument.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('panDocument', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload PAN document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gstDocument" className="text-sm font-medium">
+                        GST Document Upload *
+                      </Label>
+                      <Input
+                        id="gstDocument"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('gstDocument', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.gstDocument && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.gstDocument.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.gstDocument.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('gstDocument', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload GST document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional Fields for Municipality */}
+              {isMunicipalityType() && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-sm font-semibold text-gray-900">Municipality Details</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="state" className="text-sm font-medium">
+                        State *
+                      </Label>
+                      <Input
+                        id="state"
+                        value={formData.state || ''}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        className="h-10"
+                        placeholder="Enter state"
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="district" className="text-sm font-medium">
+                        District *
+                      </Label>
+                      <Input
+                        id="district"
+                        value={formData.district || ''}
+                        onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                        className="h-10"
+                        placeholder="Enter district"
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="panNumberMunicipality" className="text-sm font-medium">
+                        PAN Number *
+                      </Label>
+                      <Input
+                        id="panNumberMunicipality"
+                        value={formData.panNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gstNumberMunicipality" className="text-sm font-medium">
+                        GST Number *
+                      </Label>
+                      <Input
+                        id="gstNumberMunicipality"
+                        value={formData.gstNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter GST number"
+                        maxLength={15}
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="panDocumentMunicipality" className="text-sm font-medium">
+                        PAN Document Upload *
+                      </Label>
+                      <Input
+                        id="panDocumentMunicipality"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('panDocumentMunicipality', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.panDocumentMunicipality && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.panDocumentMunicipality.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.panDocumentMunicipality.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('panDocumentMunicipality', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload PAN document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="gstDocumentMunicipality" className="text-sm font-medium">
+                        GST Document Upload *
+                      </Label>
+                      <Input
+                        id="gstDocumentMunicipality"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('gstDocumentMunicipality', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.gstDocumentMunicipality && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.gstDocumentMunicipality.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.gstDocumentMunicipality.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('gstDocumentMunicipality', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload GST document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="gap-2 flex-shrink-0">
@@ -456,7 +1033,14 @@ export default function OrganizationsManagement() {
       )}
 
       {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open)
+        if (!open) {
+          // Reset form and state when dialog closes
+          resetForm()
+          setEditingOrganization(null)
+        }
+      }}>
         <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-xl font-semibold">Edit Organization</DialogTitle>
@@ -484,43 +1068,49 @@ export default function OrganizationsManagement() {
                       role="combobox"
                       aria-expanded={orgTypeOpen}
                       className="w-full justify-between h-10"
-                      disabled={submitting}
+                      disabled={submitting || loadingOrgTypes}
                     >
                       <div className="flex items-center text-gray-500 font-normal">
                         <Building2 className="mr-3 h-4 w-4 text-gray-400" />
-                        {selectedOrgType
-                          ? organizations.find((org) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
+                        {loadingOrgTypes ? (
+                          <span className="flex items-center gap-2"><Spinner size={16} /> Loading organization types...</span>
+                        ) : selectedOrgType
+                          ? organizationTypes.find((org: OrganizationItem) => `${org.id}-${org.branchName}` === selectedOrgType)?.branchName
                           : "Select organization type"}
                       </div>
                       <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput placeholder="Search organization types..." />
-                      <CommandList>
-                        <CommandEmpty>No organization type found.</CommandEmpty>
-                        <CommandGroup>
-                          {organizations.map((org) => (
-                            <CommandItem
-                              key={org.id}
-                              value={org.branchName}
-                              onSelect={() => handleOrgTypeChange(`${org.id}-${org.branchName}`)}
-                            >
-                              <Check
-                                className={`mr-2 h-4 w-4 ${
-                                  selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
-                                }`}
-                              />
-                              <div className="flex flex-col">
-                                <span className="font-medium">{org.branchName}</span>
-                                <span className="text-xs text-muted-foreground">ID: {org.id}</span>
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
+                    {loadingOrgTypes ? (
+                      <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading organization types...</div>
+                    ) : (
+                      <Command>
+                        <CommandInput placeholder="Search organization types..." />
+                        <CommandList>
+                          <CommandEmpty>No organization type found.</CommandEmpty>
+                          <CommandGroup>
+                            {organizationTypes.map((org: OrganizationItem) => (
+                              <CommandItem
+                                key={org.id}
+                                value={org.branchName}
+                                onSelect={() => handleOrgTypeChange(`${org.id}-${org.branchName}`)}
+                              >
+                                <Check
+                                  className={`mr-2 h-4 w-4 ${
+                                    selectedOrgType === `${org.id}-${org.branchName}` ? "opacity-100" : "opacity-0"
+                                  }`}
+                                />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{org.branchName}</span>
+                                  <span className="text-xs text-muted-foreground">ID: {org.id}</span>
+                                </div>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    )}
                   </PopoverContent>
                 </Popover>
               </div>
@@ -586,6 +1176,300 @@ export default function OrganizationsManagement() {
                   />
                 </div>
               </div>
+
+              {/* Conditional Fields for Lender */}
+              {isLenderType() && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-sm font-semibold text-gray-900">Lender Details</h3>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="editLenderType" className="text-sm font-medium">
+                      Type of Lender *
+                    </Label>
+                    <Select
+                      value={formData.lenderType}
+                      onValueChange={(value) => setFormData({ ...formData, lenderType: value })}
+                      disabled={submitting}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Select type of lender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Bank">Bank</SelectItem>
+                        <SelectItem value="NBFC">NBFC</SelectItem>
+                        <SelectItem value="Multilateral">Multilateral</SelectItem>
+                        <SelectItem value="Philanthropy">Philanthropy</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editPanNumber" className="text-sm font-medium">
+                        PAN Number *
+                      </Label>
+                      <Input
+                        id="editPanNumber"
+                        value={formData.panNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editGstNumber" className="text-sm font-medium">
+                        GST Number *
+                      </Label>
+                      <Input
+                        id="editGstNumber"
+                        value={formData.gstNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter GST number"
+                        maxLength={15}
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editPanDocument" className="text-sm font-medium">
+                        PAN Document Upload *
+                      </Label>
+                      <Input
+                        id="editPanDocument"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('panDocument', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.panDocument && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.panDocument.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.panDocument.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('panDocument', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload PAN document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editGstDocument" className="text-sm font-medium">
+                        GST Document Upload *
+                      </Label>
+                      <Input
+                        id="editGstDocument"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('gstDocument', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.gstDocument && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.gstDocument.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.gstDocument.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('gstDocument', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload GST document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Conditional Fields for Municipality */}
+              {isMunicipalityType() && (
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="text-sm font-semibold text-gray-900">Municipality Details</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editState" className="text-sm font-medium">
+                        State *
+                      </Label>
+                      <Input
+                        id="editState"
+                        value={formData.state || ''}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        className="h-10"
+                        placeholder="Enter state"
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editDistrict" className="text-sm font-medium">
+                        District *
+                      </Label>
+                      <Input
+                        id="editDistrict"
+                        value={formData.district || ''}
+                        onChange={(e) => setFormData({ ...formData, district: e.target.value })}
+                        className="h-10"
+                        placeholder="Enter district"
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editPanNumberMunicipality" className="text-sm font-medium">
+                        PAN Number *
+                      </Label>
+                      <Input
+                        id="editPanNumberMunicipality"
+                        value={formData.panNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                        disabled={submitting}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editGstNumberMunicipality" className="text-sm font-medium">
+                        GST Number *
+                      </Label>
+                      <Input
+                        id="editGstNumberMunicipality"
+                        value={formData.gstNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, gstNumber: e.target.value.toUpperCase() })}
+                        className="h-10"
+                        placeholder="Enter GST number"
+                        maxLength={15}
+                        disabled={submitting}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="editPanDocumentMunicipality" className="text-sm font-medium">
+                        PAN Document Upload *
+                      </Label>
+                      <Input
+                        id="editPanDocumentMunicipality"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('panDocumentMunicipality', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.panDocumentMunicipality && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.panDocumentMunicipality.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.panDocumentMunicipality.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('panDocumentMunicipality', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload PAN document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editGstDocumentMunicipality" className="text-sm font-medium">
+                        GST Document Upload *
+                      </Label>
+                      <Input
+                        id="editGstDocumentMunicipality"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          handleFileChange('gstDocumentMunicipality', file)
+                        }}
+                        className="h-10"
+                        disabled={submitting}
+                      />
+                      {formData.gstDocumentMunicipality && (
+                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
+                          <div className="flex items-center space-x-2">
+                            <File className="h-4 w-4" />
+                            <span className="text-sm">{formData.gstDocumentMunicipality.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              ({formatFileSize(formData.gstDocumentMunicipality.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleFileChange('gstDocumentMunicipality', null)}
+                            disabled={submitting}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Upload GST document (PDF, JPG, PNG)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter className="gap-2 flex-shrink-0">

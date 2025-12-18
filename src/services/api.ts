@@ -9,7 +9,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 10000, // Default timeout (10 seconds)
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  },
+})
+
+// Extended timeout for Perdix queries (30 seconds)
+const perdixApi = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000, // 30 seconds for Perdix queries
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -17,68 +27,100 @@ const api = axios.create({
 })
 
 // Request interceptor: Automatically attach JWT token to all requests
-api.interceptors.request.use(
-  (config) => {
-    const token = tokenStorage.get()
-    if (token) {
-      // Add Authorization header with JWT token
-      // Format: "Authorization: JWT <token>" as per your API requirement
-      config.headers.Authorization = `JWT ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
+const requestInterceptor = (config: any) => {
+  const token = tokenStorage.get()
+  if (token) {
+    // Add Authorization header with JWT token
+    // Format: "Authorization: JWT <token>" as per your API requirement
+    config.headers.Authorization = `JWT ${token}`
   }
-)
+  return config
+}
+
+api.interceptors.request.use(requestInterceptor, (error) => {
+  return Promise.reject(error)
+})
+
+// Apply same interceptor to perdixApi
+perdixApi.interceptors.request.use(requestInterceptor, (error) => {
+  return Promise.reject(error)
+})
 
 // Response interceptor: Handle 401 Unauthorized (token expired/invalid)
-api.interceptors.response.use(
-  (response) => {
+const responseInterceptor = {
+  onFulfilled: (response: any) => {
     return response
   },
-  (error) => {
+  onRejected: (error: any) => {
     if (error.response?.status === 401) {
       // Token expired or invalid - clear auth data
       tokenStorage.remove()
-      // Optionally redirect to login page
-      if (window.location.pathname !== '/login') {
+      // Don't redirect during registration or login flows
+      const currentPath = window.location.pathname
+      const isAuthPage = currentPath === '/login' || currentPath === '/register' || currentPath.startsWith('/register')
+      if (!isAuthPage && currentPath !== '/login') {
         window.location.href = '/login'
       }
     }
     return Promise.reject(error)
   }
-)
+}
+
+api.interceptors.response.use(responseInterceptor.onFulfilled, responseInterceptor.onRejected)
+perdixApi.interceptors.response.use(responseInterceptor.onFulfilled, responseInterceptor.onRejected)
 
 // Generic API functions
 export const apiService = {
   // GET request
-  get: async <T = any>(endpoint: string, params?: Record<string, any>) => {
-    const response = await api.get<T>(endpoint, { params })
+  get: async <T = any>(endpoint: string, params?: Record<string, any>, config?: { timeout?: number; signal?: AbortSignal }) => {
+    const axiosConfig = { 
+      params,
+      timeout: config?.timeout,
+      signal: config?.signal
+    }
+    const response = await api.get<T>(endpoint, axiosConfig)
     return response.data
   },
 
   // POST request
-  post: async <T = any>(endpoint: string, data?: any) => {
-    const response = await api.post<T>(endpoint, data)
+  post: async <T = any>(endpoint: string, data?: any, config?: { timeout?: number; signal?: AbortSignal; usePerdixTimeout?: boolean }) => {
+    // Use perdixApi for Perdix queries with extended timeout
+    const axiosInstance = config?.usePerdixTimeout ? perdixApi : api
+    const axiosConfig = {
+      timeout: config?.timeout || (config?.usePerdixTimeout ? 30000 : undefined),
+      signal: config?.signal
+    }
+    const response = await axiosInstance.post<T>(endpoint, data, axiosConfig)
     return response.data
   },
 
   // PUT request
-  put: async <T = any>(endpoint: string, data?: any) => {
-    const response = await api.put<T>(endpoint, data)
+  put: async <T = any>(endpoint: string, data?: any, config?: { timeout?: number; signal?: AbortSignal }) => {
+    const axiosConfig = {
+      timeout: config?.timeout,
+      signal: config?.signal
+    }
+    const response = await api.put<T>(endpoint, data, axiosConfig)
     return response.data
   },
 
   // PATCH request
-  patch: async <T = any>(endpoint: string, data?: any) => {
-    const response = await api.patch<T>(endpoint, data)
+  patch: async <T = any>(endpoint: string, data?: any, config?: { timeout?: number; signal?: AbortSignal }) => {
+    const axiosConfig = {
+      timeout: config?.timeout,
+      signal: config?.signal
+    }
+    const response = await api.patch<T>(endpoint, data, axiosConfig)
     return response.data
   },
 
   // DELETE request
-  delete: async <T = any>(endpoint: string) => {
-    const response = await api.delete<T>(endpoint)
+  delete: async <T = any>(endpoint: string, config?: { timeout?: number; signal?: AbortSignal }) => {
+    const axiosConfig = {
+      timeout: config?.timeout,
+      signal: config?.signal
+    }
+    const response = await api.delete<T>(endpoint, axiosConfig)
     return response.data
   },
 }
