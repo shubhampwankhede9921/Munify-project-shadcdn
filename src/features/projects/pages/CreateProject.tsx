@@ -545,7 +545,8 @@ export default function CreateProject() {
 
   // Mutation for submitting draft (converts draft to project)
   const submitDraftMutation = useMutation({
-    mutationFn: (draftId: string) => apiService.post(`/project-drafts/${draftId}/submit`),
+    mutationFn: ({ draftId, payload }: { draftId: string; payload: any }) => 
+      apiService.post(`/project-drafts/${draftId}/submit`, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
       queryClient.invalidateQueries({ queryKey: ['project-drafts'] })
@@ -985,8 +986,11 @@ export default function CreateProject() {
       resubmitProjectMutation.mutate(payload)
     }
     // If we have a draft ID, submit the draft (which will create the project from draft data)
+    // IMPORTANT: Send both draftId and current form payload to ensure backend receives latest form data
+    // even if user made changes without saving draft again
     else if (currentDraftId) {
-      submitDraftMutation.mutate(currentDraftId)
+      const payload = mapFormDataToApiPayload('pending_validation')
+      submitDraftMutation.mutate({ draftId: currentDraftId, payload })
     } else {
       // If no draft exists, create project directly using the project creation API
       const payload = mapFormDataToApiPayload('pending_validation')
