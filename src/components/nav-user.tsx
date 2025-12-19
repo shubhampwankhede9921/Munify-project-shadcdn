@@ -4,11 +4,8 @@ import {
   BadgeCheck,
   Bell,
   ChevronsUpDown,
-  CircleUserRound,
   CreditCard,
   LogOut,
-  Sparkles,
-  User,
 } from "lucide-react"
 
 import {
@@ -32,6 +29,10 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { useNavigate } from "react-router-dom"
+import { useMutation } from "@tanstack/react-query"
+import { useAuth } from "@/hooks/use-auth"
+import apiService from "@/services/api"
+import { alerts } from "@/lib/alerts"
 
 export function NavUser({
   user,
@@ -44,6 +45,36 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
   const navigate = useNavigate()
+  const { logout } = useAuth()
+
+  // Logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: () => apiService.post('/auth/logout'),
+    onSuccess: (data: any) => {
+      // Handle success response: { "raw": "Logout successful" }
+      const successMessage = data?.raw || "You have been logged out successfully"
+      logout()
+      alerts.success("Success", successMessage)
+      navigate('/login')
+    },
+    onError: (error: any) => {
+      // Even if API call fails, logout locally to ensure user is signed out
+      logout()
+      // Handle error response: { "error": "No active session found" }
+      const message =
+        error?.response?.data?.error ||
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Failed to logout from server, but you have been logged out locally."
+      alerts.error("Logout Error", message)
+      navigate('/login')
+    },
+  })
+
+  const handleLogout = () => {
+    logoutMutation.mutate()
+  }
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -106,9 +137,13 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem 
+              className="cursor-pointer"
+              onClick={handleLogout}
+              disabled={logoutMutation.isPending}
+            >
               <LogOut />
-              Log out
+              {logoutMutation.isPending ? "Logging out..." : "Log out"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

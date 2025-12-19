@@ -5,17 +5,17 @@ import { Label } from "@/components/ui/label"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { 
-  Building2, 
-  User, 
-  Mail, 
-  Phone, 
-  Shield, 
-  Check, 
+import {
+  Building2,
+  User,
+  Mail,
+  Phone,
+  Shield,
+  Check,
   ChevronDown,
   Send,
   Users,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react"
 import { useState } from "react"
 import { useQuery, useMutation } from "@tanstack/react-query"
@@ -25,6 +25,7 @@ import { apiService } from "@/services/api"
 import { alerts } from "@/lib/alerts"
 import { cn } from "@/lib/utils"
 import { Spinner, LoadingOverlay } from "@/components/ui/spinner"
+import { useAuth } from "@/contexts/auth-context"
 
 // Type for organization/organization type items
 type OrganizationItem = {
@@ -35,6 +36,7 @@ type OrganizationItem = {
 
 export default function AdminInvitation() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("organization")
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
@@ -189,6 +191,10 @@ export default function AdminInvitation() {
     try {
       const selectedRole = roles.find((r) => r.id.toString() === userForm.roleId)
 
+      // Determine who is sending the invitation (same value used on Dashboard: user?.data?.login)
+      const invitedBy =
+        (user as any)?.data?.login
+
       const payload = {
         organizationId: Number(orgForm.organizationId),
         organizationTypeId: Number(orgForm.organizationTypeId),
@@ -198,6 +204,7 @@ export default function AdminInvitation() {
         mobileNumber: Number(userForm.mobileNumber),
         roleId: Number(userForm.roleId),
         roleName: selectedRole?.name || "",
+        invited_by: invitedBy,
       }
 
       const response = await submitInvitation(payload)
