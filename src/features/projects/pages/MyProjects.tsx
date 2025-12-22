@@ -23,10 +23,34 @@ const normalizeProjects = (data: any): any[] => {
   return data?.data || []
 }
 
-// Helper function to format currency
-const formatCurrency = (amount: string | number): number => {
-  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
-  return isNaN(numAmount) ? 0 : numAmount
+// Helper function to normalize numeric amount (in rupees)
+const normalizeAmount = (amount: string | number): number => {
+  const numAmount = typeof amount === "string" ? parseFloat(amount) : amount
+  return Number.isNaN(numAmount) ? 0 : numAmount
+}
+
+// Helper function to format amounts for display with dynamic units
+// e.g. 950 → ₹950, 150000 → ₹1.5L, 25000000 → ₹2.5Cr
+const formatAmountDisplay = (amount: number): string => {
+  if (!amount || Number.isNaN(amount)) return "₹0"
+
+  if (amount >= 10000000) {
+    // 1 Cr = 10,000,000
+    return `₹${(amount / 10000000).toFixed(1)}Cr`
+  }
+
+  if (amount >= 100000) {
+    // 1 Lakh = 100,000
+    return `₹${(amount / 100000).toFixed(1)}L`
+  }
+
+  if (amount >= 1000) {
+    // Thousands for mid‑range small amounts
+    return `₹${(amount / 1000).toFixed(1)}K`
+  }
+
+  // Very small amounts – show full rupee value
+  return `₹${amount.toFixed(0)}`
 }
 
 // Helper function to get progress percentage
@@ -132,11 +156,11 @@ export default function MyProjects() {
               {fundedProjects.map((project: any) => {
                 // Get commitment details from API response
                 const commitment = project.commitment || project.commitment_details || {}
-                const commitmentStatus = commitment.status || project.commitment_status || project.status
-                const commitmentAmount = commitment.amount || project.commitment_amount || project.amount || 0
+                const commitmentStatus = commitment.status || 0
+                const commitmentAmount = commitment.amount || 0
                 
                 const progress = getProgress(project.funding_percentage)
-                const myInvestment = formatCurrency(commitmentAmount)
+                const myInvestment = normalizeAmount(commitmentAmount)
                 const expectedROI = commitment.interest_rate || project.average_interest_rate || null
                 const currentValue = expectedROI ? myInvestment * (1 + (expectedROI / 100)) : myInvestment
                 const municipality = project.city || project.state || project.organization_id || 'N/A'
@@ -208,11 +232,11 @@ export default function MyProjects() {
                       <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                           <span>My Investment</span>
-                          <span className="font-medium">₹{(myInvestment / 100000).toFixed(1)}L</span>
+                          <span className="font-medium">{formatAmountDisplay(myInvestment)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span>Current Value</span>
-                          <span className="font-medium text-green-600">₹{(currentValue / 100000).toFixed(1)}L</span>
+                          <span className="font-medium text-green-600">{formatAmountDisplay(currentValue)}</span>
                         </div>
                         {expectedROI !== null && (
                           <div className="flex justify-between text-sm">
