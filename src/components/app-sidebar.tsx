@@ -73,6 +73,7 @@ const data = {
       items: [
         { title: "Roles Management", url: "/main/master/roles" },
         { title: "Organizations Management", url: "/main/master/organizations" },
+        { title: "Common Master Excel", url: "/main/master/common-excel" },
       ],
     },
     {
