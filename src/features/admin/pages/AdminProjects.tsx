@@ -1,15 +1,12 @@
 import { useState, useMemo, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { DataTable, type ColumnDef } from "@/components/data-table/data-table"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -30,8 +27,6 @@ import {
   CheckCircle,
   IndianRupee,
   Clock,
-  CheckCircle2,
-  X,
   ArrowUpDown,
 } from "lucide-react"
 import apiService from "@/services/api"
@@ -76,7 +71,6 @@ type ProjectsApiResponse = AdminProject[] | { data: AdminProject[] } | { results
 export default function AdminProjects() {
   const navigate = useNavigate()
   const location = useLocation()
-  const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all')
 
   // Auto-switch to pending tab if coming from validation route
@@ -85,11 +79,6 @@ export default function AdminProjects() {
       setActiveTab('pending')
     }
   }, [location.pathname])
-  const [selectedProject, setSelectedProject] = useState<AdminProject | null>(null)
-  const [isReviewDialogOpen, setIsReviewDialogOpen] = useState(false)
-  const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false)
-  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false)
-  const [remarks, setRemarks] = useState('')
 
   // Query for all projects
   const { data: apiResponse, isLoading, error, isError } = useQuery<ProjectsApiResponse>({
@@ -146,42 +135,6 @@ export default function AdminProjects() {
       activeInvestors: allProjects.reduce((sum, p) => sum + (p.investors || 0), 0)
     }
   }, [allProjects])
-
-  // Mutation for approving project
-  const approveProjectMutation = useMutation({
-    mutationFn: ({ projectId, remarks }: { projectId: number; remarks?: string }) => {
-      return apiService.put(`/projects/${projectId}/approve`, { remarks: remarks || '' })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-      alerts.success('Project Approved', 'The project has been approved successfully.')
-      setIsApproveDialogOpen(false)
-      setSelectedProject(null)
-      setRemarks('')
-    },
-    onError: (error: any) => {
-      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to approve project.'
-      alerts.error('Error', errorMessage)
-    },
-  })
-
-  // Mutation for rejecting project
-  const rejectProjectMutation = useMutation({
-    mutationFn: ({ projectId, remarks }: { projectId: number; remarks: string }) => {
-      return apiService.put(`/projects/${projectId}/reject`, { remarks })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-      alerts.success('Project Rejected', 'The project has been rejected and sent back to the municipality.')
-      setIsRejectDialogOpen(false)
-      setSelectedProject(null)
-      setRemarks('')
-    },
-    onError: (error: any) => {
-      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to reject project.'
-      alerts.error('Error', errorMessage)
-    },
-  })
 
   // Helper functions
   const getProjectName = (project: AdminProject) => {
@@ -275,42 +228,6 @@ export default function AdminProjects() {
   const isPendingValidation = (project: AdminProject) => {
     const status = project.status?.toLowerCase() || ''
     return status === 'pending_validation' || status === 'pending validation'
-  }
-
-  const handleViewDetails = (project: AdminProject) => {
-    setSelectedProject(project)
-    setIsReviewDialogOpen(true)
-  }
-
-  const handleApprove = () => {
-    if (!selectedProject) return
-    setIsReviewDialogOpen(false)
-    setIsApproveDialogOpen(true)
-  }
-
-  const handleReject = () => {
-    if (!selectedProject) return
-    setIsReviewDialogOpen(false)
-    setIsRejectDialogOpen(true)
-  }
-
-  const confirmApprove = () => {
-    if (!selectedProject) return
-    approveProjectMutation.mutate({ 
-      projectId: selectedProject.id, 
-      remarks: remarks.trim() || undefined 
-    })
-  }
-
-  const confirmReject = () => {
-    if (!selectedProject || !remarks.trim()) {
-      alerts.error('Validation Error', 'Remarks are required when rejecting a project.')
-      return
-    }
-    rejectProjectMutation.mutate({ 
-      projectId: selectedProject.id, 
-      remarks: remarks.trim() 
-    })
   }
 
   // Define columns for DataTable
@@ -507,12 +424,6 @@ export default function AdminProjects() {
               <DropdownMenuSeparator />
               {isPending && (
                 <>
-                  <DropdownMenuItem 
-                    onClick={() => handleViewDetails(project)}
-                    className="cursor-pointer font-medium"
-                  >
-                    <Eye className="h-4 w-4 mr-2" /> Review & Validate
-                  </DropdownMenuItem>
                   <DropdownMenuItem 
                     onClick={() => navigate(`/main/admin/projects/validate/${project.id}`)}
                     className="cursor-pointer"
@@ -763,205 +674,6 @@ export default function AdminProjects() {
           )}
         </TabsContent>
       </Tabs>
-
-      {/* Review Dialog */}
-      <Dialog open={isReviewDialogOpen} onOpenChange={setIsReviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Project Review: {selectedProject ? getProjectName(selectedProject) : ''}</DialogTitle>
-            <DialogDescription>
-              Review project details before approving or rejecting
-            </DialogDescription>
-          </DialogHeader>
-          {selectedProject && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <Label className="text-muted-foreground">Project Title</Label>
-                  <p className="font-medium">{getProjectName(selectedProject)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Category</Label>
-                  <p className="font-medium">{getCategory(selectedProject)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">State</Label>
-                  <p className="font-medium">{getState(selectedProject)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">City</Label>
-                  <p className="font-medium">{selectedProject.city || '—'}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Project Stage</Label>
-                  <p className="font-medium">
-                    {selectedProject.project_stage?.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()) || '—'}
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Status</Label>
-                  <div className="mt-1">{getStatusBadge(selectedProject.status)}</div>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Total Project Cost</Label>
-                  <p className="font-medium">{formatCurrency(selectedProject.total_project_cost || 0)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Funding Required</Label>
-                  <p className="font-medium">{formatCurrency(getFundRequired(selectedProject))}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Submitted On</Label>
-                  <p className="font-medium">{formatDate(selectedProject.created_at)}</p>
-                </div>
-                <div>
-                  <Label className="text-muted-foreground">Last Updated</Label>
-                  <p className="font-medium">{formatDate(selectedProject.updated_at)}</p>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter className="flex gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
-              onClick={() => setIsReviewDialogOpen(false)}
-              className="transition-all duration-200"
-            >
-              Close
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleReject}
-              disabled={approveProjectMutation.isPending || rejectProjectMutation.isPending}
-              className="transition-all duration-200 hover:shadow-md"
-            >
-              <X className="h-4 w-4 mr-2" />
-              Reject
-            </Button>
-            <Button 
-              onClick={handleApprove}
-              disabled={approveProjectMutation.isPending || rejectProjectMutation.isPending}
-              className="transition-all duration-200 hover:shadow-md"
-            >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Approve
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Approve Confirmation Dialog */}
-      <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Project</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to approve this project? You can add optional remarks.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="approve-remarks">Remarks (Optional)</Label>
-              <Textarea
-                id="approve-remarks"
-                placeholder="Add any remarks or notes..."
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsApproveDialogOpen(false)
-                setRemarks('')
-              }}
-              disabled={approveProjectMutation.isPending}
-              className="transition-all duration-200"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={confirmApprove}
-              disabled={approveProjectMutation.isPending}
-              className="transition-all duration-200 hover:shadow-md min-w-[140px]"
-            >
-              {approveProjectMutation.isPending ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Approving...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Confirm Approval
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Confirmation Dialog */}
-      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Project</DialogTitle>
-            <DialogDescription>
-              Please provide remarks explaining why this project is being rejected. The municipality will receive this feedback.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reject-remarks">Remarks *</Label>
-              <Textarea
-                id="reject-remarks"
-                placeholder="Explain why this project is being rejected..."
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                rows={4}
-                className={!remarks.trim() ? 'border-red-500' : ''}
-              />
-              {!remarks.trim() && (
-                <p className="text-sm text-red-500">Remarks are required when rejecting a project</p>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsRejectDialogOpen(false)
-                setRemarks('')
-              }}
-              disabled={rejectProjectMutation.isPending}
-              className="transition-all duration-200"
-            >
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive"
-              onClick={confirmReject}
-              disabled={rejectProjectMutation.isPending || !remarks.trim()}
-              className="transition-all duration-200 hover:shadow-md min-w-[140px]"
-            >
-              {rejectProjectMutation.isPending ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Rejecting...
-                </>
-              ) : (
-                <>
-                  <X className="h-4 w-4 mr-2" />
-                  Confirm Rejection
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
