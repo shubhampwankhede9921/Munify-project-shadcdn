@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -46,24 +45,11 @@ interface Ownership {
   value: string
 }
 
-// Sample Municipalities (will be replaced with API data later)
-const municipalities = [
-  { id: 'BMC', name: 'Brihanmumbai Municipal Corporation', code: 'BMC' },
-  { id: 'PMC', name: 'Pune Municipal Corporation', code: 'PMC' },
-  { id: 'NMC', name: 'Nashik Municipal Corporation', code: 'NMC' },
-  { id: 'GHMC', name: 'Greater Hyderabad Municipal Corporation', code: 'GHMC' },
-  { id: 'BBMP', name: 'Bruhat Bengaluru Mahanagara Palike', code: 'BBMP' },
-  { id: 'CC', name: 'Chennai Corporation', code: 'CC' },
-  { id: 'KMC', name: 'Kolkata Municipal Corporation', code: 'KMC' },
-  { id: 'NDMC', name: 'New Delhi Municipal Council', code: 'NDMC' },
-] as const
-
 interface FormData {
   // Project Identification
   projectTitle: string
   projectReferenceId: string // System-generated, display only
   municipalityId: string
-  municipalityCode: string
   department: string
   contactPersonName: string
   contactPersonDesignation: string
@@ -128,6 +114,7 @@ export default function CreateProject() {
   const [fundingTypeOpen, setFundingTypeOpen] = useState(false)
   const [modeOpen, setModeOpen] = useState(false)
   const [ownershipOpen, setOwnershipOpen] = useState(false)
+  const [municipalityOpen, setMunicipalityOpen] = useState(false)
   const { user } = useAuth()
   // Check if we're editing a rejected project
   useEffect(() => {
@@ -168,6 +155,39 @@ export default function CreateProject() {
     queryFn: () => apiService.get('/master/ownerships'),
     retry: false,
   })
+
+  // Query for municipalities using Perdix API with parent_branch_id: 101
+  const { data: municipalitiesResponse, isLoading: isLoadingMunicipalities } = useQuery({
+    queryKey: ['municipalities'],
+    queryFn: async () => {
+      const response = await apiService.post('/perdix/query', {
+        identifier: 'childBranch.list',
+        limit: 0,
+        offset: 0,
+        parameters: {
+          parent_branch_id: 101
+        },
+        skip_relogin: 'yes'
+      })
+      // Extract results array and map to Municipality format
+      const results = (response as any)?.results || []
+      return results.map((item: any) => ({
+        id: String(item.id),
+        name: item.branch_name || item.branchName || '',
+        code: String(item.id)
+      }))
+    },
+    retry: false,
+  })
+
+  // Extract municipalities from API response
+  const municipalities: any[] = useMemo(() => {
+    if (!municipalitiesResponse) return []
+    if (Array.isArray(municipalitiesResponse)) {
+      return municipalitiesResponse
+    }
+    return []
+  }, [municipalitiesResponse])
 
   // Extract categories and stages from API response
   const categories: ProjectCategory[] = useMemo(() => {
@@ -247,7 +267,6 @@ export default function CreateProject() {
     projectTitle: '',
     projectReferenceId: projectReferenceId,
     municipalityId: '',
-    municipalityCode: '',
     department: '',
     contactPersonName: '',
     contactPersonDesignation: '',
@@ -308,9 +327,9 @@ export default function CreateProject() {
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59` : undefined
     const createdBy = user?.data?.login
     return {
-      title: formData.projectTitle || 'Untitled Project',
-      organization_type: 'municipality',
-      organization_id: formData.municipalityId || formData.municipalityCode || '',
+      title: formData.projectTitle || '',
+      organization_type: user?.data?.org_type,
+      organization_id: formData.municipalityId || '',
       department: formData.department || '',
       contact_person: formData.contactPersonName || '',
       contact_person_designation: formData.contactPersonDesignation || undefined,
@@ -366,8 +385,8 @@ export default function CreateProject() {
     const createdBy = user?.data?.login
 
     return {
-      organization_type: 'municipality',
-      organization_id: formData.municipalityId || formData.municipalityCode || 'ORG-001',
+      organization_type: user?.data?.org_type,
+      organization_id: formData.municipalityId || 'ORG-001',
       title: formData.projectTitle,
       department: formData.department || '',
       contact_person: formData.contactPersonName,
@@ -454,7 +473,6 @@ export default function CreateProject() {
           projectTitle: item.title ?? prev.projectTitle,
           projectReferenceId: item.project_reference_id ?? prev.projectReferenceId,
           municipalityId: item.organization_id ?? prev.municipalityId,
-          municipalityCode: item.organization_id ?? prev.municipalityCode,
           department: item.department ?? prev.department,
           contactPersonName: item.contact_person ?? prev.contactPersonName,
           contactPersonDesignation: item.contact_person_designation ?? prev.contactPersonDesignation,
@@ -534,7 +552,17 @@ export default function CreateProject() {
         // Update URL without navigation
         window.history.replaceState({}, '', `/main/admin/projects/create/${draftId}`)
       }
+      
+      // Invalidate both the list query and the specific draft query
       queryClient.invalidateQueries({ queryKey: ['project-drafts'] })
+      if (draftId) {
+        queryClient.invalidateQueries({ queryKey: ['project-draft', String(draftId)] })
+      }
+      // Also invalidate the old draftId if it was different (shouldn't happen, but just in case)
+      if (currentDraftId && currentDraftId !== String(draftId)) {
+        queryClient.invalidateQueries({ queryKey: ['project-draft', currentDraftId] })
+      }
+      
       alerts.success('Draft Saved', 'Your project draft has been saved successfully.')
     },
     onError: (error: any) => {
@@ -586,8 +614,8 @@ export default function CreateProject() {
     const fundraisingEndDate = formData.fundraisingEndDate ? `${formData.fundraisingEndDate}T23:59:59Z` : undefined
 
     return {
-      organization_type: 'municipality',
-      organization_id: formData.municipalityId || formData.municipalityCode || '',
+      organization_type: user?.data?.org_type,
+      organization_id: formData.municipalityId || '',
       title: formData.projectTitle,
       department: formData.department || '',
       contact_person: formData.contactPersonName,
@@ -656,11 +684,9 @@ export default function CreateProject() {
   }
 
   const handleMunicipalityChange = (municipalityId: string) => {
-    const municipality = municipalities.find(m => m.id === municipalityId)
     setFormData(prev => ({
       ...prev,
       municipalityId: municipalityId,
-      municipalityCode: municipality?.code || '',
     }))
     if (errors.municipalityId) {
       setErrors(prev => {
@@ -1151,28 +1177,63 @@ export default function CreateProject() {
 
               <div className="space-y-2">
                 <Label htmlFor="municipalityId">Municipality *</Label>
-                <Select
-                  value={formData.municipalityId}
-                  onValueChange={handleMunicipalityChange}
-                >
-                  <SelectTrigger className={errors.municipalityId ? 'border-red-500' : ''}>
-                    <SelectValue placeholder="Select municipality" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipalities.map((municipality) => (
-                      <SelectItem key={municipality.id} value={municipality.id}>
-                        {municipality.name} ({municipality.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={municipalityOpen} onOpenChange={setMunicipalityOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={municipalityOpen}
+                      className={cn(
+                        "w-full justify-between",
+                        errors.municipalityId && "border-red-500",
+                        !formData.municipalityId && "text-muted-foreground"
+                      )}
+                      disabled={isLoadingMunicipalities}
+                    >
+                      {isLoadingMunicipalities ? (
+                        <span className="flex items-center gap-2">
+                          <Spinner size={16} />
+                          Loading municipalities...
+                        </span>
+                      ) : formData.municipalityId ? (
+                        municipalities.find((m) => m.id === formData.municipalityId)?.name || formData.municipalityId
+                      ) : (
+                        "Select municipality"
+                      )}
+                      <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search municipalities..." />
+                      <CommandList>
+                        <CommandEmpty>No municipality found.</CommandEmpty>
+                        <CommandGroup>
+                          {municipalities.map((municipality) => (
+                            <CommandItem
+                              key={municipality.id}
+                              value={municipality.name}
+                              onSelect={() => {
+                                handleMunicipalityChange(municipality.id)
+                                setMunicipalityOpen(false)
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.municipalityId === municipality.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {municipality.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
                 {errors.municipalityId && (
                   <p className="text-sm text-red-500">{errors.municipalityId}</p>
-                )}
-                {formData.municipalityCode && (
-                  <p className="text-xs text-muted-foreground">
-                    Municipality Code: {formData.municipalityCode}
-                  </p>
                 )}
               </div>
 
