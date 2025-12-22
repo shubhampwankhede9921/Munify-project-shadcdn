@@ -48,6 +48,20 @@ const formatDate = (value?: string) => {
   })
 }
 
+const formatCurrency = (amount: string | number | null | undefined) => {
+  if (!amount) return "₹0"
+  const num = typeof amount === "string" ? parseFloat(amount) : amount
+  if (Number.isNaN(num)) return "₹0"
+  if (num >= 10000000) {
+    return `₹${(num / 10000000).toFixed(2)}Cr`
+  } else if (num >= 100000) {
+    return `₹${(num / 100000).toFixed(2)}L`
+  } else if (num >= 1000) {
+    return `₹${(num / 1000).toFixed(2)}K`
+  }
+  return `₹${num.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+}
+
 export function FundingCommitmentDialog({
   open,
   project_reference_id,
@@ -62,6 +76,7 @@ export function FundingCommitmentDialog({
   const [terms, setTerms] = useState("")
   const [supportingDocument, setSupportingDocument] = useState<File | null>(null)
   const [commitmentId, setCommitmentId] = useState<number | null>(null)
+  const [amountError, setAmountError] = useState("")
 
   // TODO: replace with real authenticated user from auth context
   const { user } = useAuth()
@@ -175,6 +190,39 @@ export function FundingCommitmentDialog({
     setTerms("")
     setSupportingDocument(null)
     setCommitmentId(null)
+    setAmountError("")
+  }
+
+  // Validate amount against minimum commitment amount
+  const validateAmount = (value: string) => {
+    if (!value.trim()) {
+      setAmountError("")
+      return true
+    }
+
+    const parsedAmount = parseFloat(value)
+    if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setAmountError("Please enter a valid commitment amount")
+      return false
+    }
+
+    const minAmount = project?.minimum_commitment_amount
+    if (minAmount) {
+      const minAmountNum = typeof minAmount === "string" ? parseFloat(minAmount) : minAmount
+      if (!Number.isNaN(minAmountNum) && parsedAmount < minAmountNum) {
+        setAmountError(`Amount must be at least ${formatCurrency(minAmount)}`)
+        return false
+      }
+    }
+
+    setAmountError("")
+    return true
+  }
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setAmount(value)
+    validateAmount(value)
   }
 
   const handleClose = () => {
@@ -197,6 +245,15 @@ export function FundingCommitmentDialog({
       const parsedAmount = parseFloat(amount)
       if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
         throw new Error("Please enter a valid commitment amount")
+      }
+
+      // Validate against minimum commitment amount
+      const minAmount = project.minimum_commitment_amount
+      if (minAmount) {
+        const minAmountNum = typeof minAmount === "string" ? parseFloat(minAmount) : minAmount
+        if (!Number.isNaN(minAmountNum) && parsedAmount < minAmountNum) {
+          throw new Error(`Commitment amount must be at least ${formatCurrency(minAmount)}`)
+        }
       }
 
       const rate = parseFloat(interestRate)
@@ -364,11 +421,19 @@ export function FundingCommitmentDialog({
                   id="amount"
                   type="number"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={handleAmountChange}
                   placeholder="Enter amount"
                   min="1"
-                  className="h-9 text-sm"
+                  className={`h-9 text-sm ${amountError ? "border-destructive focus-visible:ring-destructive" : ""}`}
                 />
+                {amountError && (
+                  <p className="text-xs text-destructive mt-1">{amountError}</p>
+                )}
+                {project?.minimum_commitment_amount && !amountError && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Minimum: {formatCurrency(project.minimum_commitment_amount)}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-1.5">
@@ -489,7 +554,8 @@ export function FundingCommitmentDialog({
                   withdrawCommitmentMutation.isPending ||
                   !isWindowOpen ||
                   isLoadingProject ||
-                  !project
+                  !project ||
+                  !!amountError
                 }
                 className="h-9 px-6"
               >
@@ -511,7 +577,8 @@ export function FundingCommitmentDialog({
                   withdrawCommitmentMutation.isPending ||
                   !isWindowOpen ||
                   isLoadingProject ||
-                  !project
+                  !project ||
+                  !!amountError
                 }
                 className="h-9 px-6"
               >
