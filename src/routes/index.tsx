@@ -35,6 +35,7 @@ import {
   DataTableReference,
   RolesManagement,
   OrganizationsManagement,
+  CommonMasterExcel,
 } from "@/pages";
 
 export const router = createBrowserRouter([
@@ -94,6 +95,7 @@ export const router = createBrowserRouter([
       { path: "components/datatable", element: <DataTableReference /> },
       { path: "master/roles", element: <RolesManagement /> },
       { path: "master/organizations", element: <OrganizationsManagement /> },
+      { path: "master/common-excel", element: <CommonMasterExcel /> },
       { path: "*", element: <NotFound /> },
     ],
   },

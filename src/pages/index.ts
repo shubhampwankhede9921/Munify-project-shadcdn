@@ -31,5 +31,6 @@ export { default as MyDrafts } from "../features/projects/pages/MyDrafts"
 export { default as DataTableReference } from "../features/admin/pages/DataTableReference"
 export { default as RolesManagement } from "../features/master/pages/RolesManagement"
 export { default as OrganizationsManagement } from "../features/master/pages/OrganizationsManagement"
+export { default as CommonMasterExcel } from "../features/master/pages/CommonMasterExcel"
 export { default as InvitationsManagement } from "../features/users/pages/InvitationsManagement"
 
