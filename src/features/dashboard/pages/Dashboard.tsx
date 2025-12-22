@@ -32,7 +32,7 @@ export default function Dashboard() {
   const recentProjects = mockProjects.slice(0, 3)
 
   const { user } = useAuth()
-  console.log(user)
+  console.log(user?.data?.login)
   
   // Top performing projects
   const topProjects = mockProjects
