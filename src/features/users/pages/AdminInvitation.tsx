@@ -18,7 +18,7 @@ import {
   AlertCircle,
 } from "lucide-react"
 import { useState } from "react"
-import { useQuery, useMutation } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "react-router-dom"
  
 import { apiService } from "@/services/api"
@@ -36,6 +36,7 @@ type OrganizationItem = {
 
 export default function AdminInvitation() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState("organization")
   const [error, setError] = useState<string | null>(null)
@@ -167,6 +168,10 @@ export default function AdminInvitation() {
 
   const { mutateAsync: submitInvitation, isPending: submitting } = useMutation({
     mutationFn: async (payload: any) => await apiService.post("/invitations/invite", payload),
+    onSuccess: () => {
+      // Invalidate all invitation queries to refresh the table
+      queryClient.invalidateQueries({ queryKey: ["invitations"] })
+    },
   })
 
   const handleSubmit = async () => {

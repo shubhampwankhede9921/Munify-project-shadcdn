@@ -383,7 +383,7 @@ export default function Register() {
                         role="combobox"
                         aria-expanded={orgTypeOpen}
                         className="w-full justify-between h-9"
-                        disabled={submitting || loadingOrgTypes}
+                        disabled={true}
                       >
                         <div className="flex items-center text-gray-500 font-normal">
                           <UserCircle className="mr-3 h-4 w-4 text-gray-400" />
@@ -453,7 +453,7 @@ export default function Register() {
                         role="combobox"
                         aria-expanded={orgNameOpen}
                         className="w-full justify-between h-9"
-                        disabled={submitting || loadingOrganizations || !orgFields.organizationTypeId}
+                        disabled={true}
                       >
                         <div className="flex items-center text-gray-500 font-normal">
                           <UserCircle className="mr-3 h-4 w-4 text-gray-400" />
@@ -520,10 +520,11 @@ export default function Register() {
                       id="userName"
                       type="text"
                       placeholder="Enter Full Name"
-                      className="pl-10"
+                      className="pl-10 bg-muted"
                       value={form.userName}
                       onChange={(e) => handleChange("userName", e.target.value)}
-                      disabled={submitting}
+                      disabled={true}
+                      readOnly
                       required
                     />
                   </div>
@@ -538,10 +539,11 @@ export default function Register() {
                       id="login"
                       type="text"
                       placeholder="Enter User ID"
-                      className="pl-10"
+                      className="pl-10 bg-muted"
                       value={form.login}
                       onChange={(e) => handleChange("login", e.target.value)}
-                      disabled={submitting}
+                      disabled={true}
+                      readOnly
                       required
                     />
                   </div>
@@ -556,10 +558,11 @@ export default function Register() {
                       id="email"
                       type="email"
                       placeholder="john.doe@example.com"
-                      className="pl-10"
+                      className="pl-10 bg-muted"
                       value={form.email}
                       onChange={(e) => handleChange("email", e.target.value)}
-                      disabled={submitting}
+                      disabled={true}
+                      readOnly
                       required
                     />
                   </div>
@@ -574,11 +577,12 @@ export default function Register() {
                       id="mobileNumber"
                       type="tel"
                       placeholder="9876543210"
-                      className="pl-10"
+                      className="pl-10 bg-muted"
                       value={form.mobileNumber}
                       onChange={(e) => handleChange("mobileNumber", e.target.value)}
                       maxLength={10}
-                      disabled={submitting}
+                      disabled={true}
+                      readOnly
                       required
                     />
                   </div>
@@ -594,6 +598,7 @@ export default function Register() {
                         role="combobox"
                         aria-expanded={open}
                         className="w-full justify-between pl-3"
+                        disabled={true}
                       >
                         <div className="flex items-center text-gray-500 font-normal">
                           <Shield className="mr-3 h-4 w-4 text-gray-400" />
