@@ -164,6 +164,16 @@ interface ProjectApiResponse {
     created_by: string
     updated_at: string
     updated_by: string | null
+    // Additional fields from CreateProject
+    funding_type?: string | null
+    commitment_allocation_days?: number | null
+    minimum_commitment_fulfilment_percentage?: number | null
+    mode_of_implementation?: string | null
+    ownership?: string | null
+    tenure?: number | null
+    cut_off_rate_percentage?: number | null
+    minimum_commitment_amount?: string | null
+    conditions?: string | null
     documents?: ProjectDocument[]
   }
 }
@@ -904,6 +914,24 @@ export default function ProjectDetails() {
                       <div className="text-sm text-muted-foreground mb-1">Category</div>
                       <div className="font-medium">{project.category || "N/A"}</div>
                     </div>
+                    {project.funding_type && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">Funding Type</div>
+                        <div className="font-medium">{project.funding_type}</div>
+                      </div>
+                    )}
+                    {project.mode_of_implementation && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">Mode of Implementation</div>
+                        <div className="font-medium">{project.mode_of_implementation}</div>
+                      </div>
+                    )}
+                    {project.ownership && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">Ownership</div>
+                        <div className="font-medium">{project.ownership}</div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -975,6 +1003,61 @@ export default function ProjectDetails() {
                       <div className="font-medium">{formatDate(project.fundraising_end_date)}</div>
                     </div>
                   </div>
+
+                  {/* Additional Financial Fields */}
+                  {(project.commitment_allocation_days !== null && project.commitment_allocation_days !== undefined) ||
+                   (project.minimum_commitment_fulfilment_percentage !== null && project.minimum_commitment_fulfilment_percentage !== undefined) ||
+                   (project.tenure !== null && project.tenure !== undefined) ||
+                   (project.cut_off_rate_percentage !== null && project.cut_off_rate_percentage !== undefined) ||
+                   project.minimum_commitment_amount ||
+                   project.conditions ? (
+                    <>
+                      <Separator />
+                      <div>
+                        <h3 className="font-semibold mb-4">Commitment & Terms</h3>
+                        <div className="grid grid-cols-2 gap-4">
+                          {project.commitment_allocation_days !== null && project.commitment_allocation_days !== undefined && (
+                            <div>
+                              <div className="text-sm text-muted-foreground mb-1">Commitment Allocation Days</div>
+                              <div className="font-medium">{project.commitment_allocation_days} days</div>
+                            </div>
+                          )}
+                          {project.minimum_commitment_fulfilment_percentage !== null && project.minimum_commitment_fulfilment_percentage !== undefined && (
+                            <div>
+                              <div className="text-sm text-muted-foreground mb-1">Minimum Commitment Fulfilment</div>
+                              <div className="font-medium">{project.minimum_commitment_fulfilment_percentage}%</div>
+                            </div>
+                          )}
+                          {project.tenure !== null && project.tenure !== undefined && (
+                            <div>
+                              <div className="text-sm text-muted-foreground mb-1">Tenure</div>
+                              <div className="font-medium">{project.tenure} months</div>
+                            </div>
+                          )}
+                          {project.cut_off_rate_percentage !== null && project.cut_off_rate_percentage !== undefined && (
+                            <div>
+                              <div className="text-sm text-muted-foreground mb-1">Cut-off Rate (Minimum Acceptable Interest Rate)</div>
+                              <div className="font-medium">{project.cut_off_rate_percentage}% p.a.</div>
+                            </div>
+                          )}
+                          {project.minimum_commitment_amount && (
+                            <div>
+                              <div className="text-sm text-muted-foreground mb-1">Minimum Commitment Amount</div>
+                              <div className="font-medium">{formatCurrency(project.minimum_commitment_amount)}</div>
+                            </div>
+                          )}
+                        </div>
+                        {project.conditions && (
+                          <div className="mt-4">
+                            <div className="text-sm text-muted-foreground mb-2">Conditions</div>
+                            <div className="p-4 bg-muted rounded-lg">
+                              <p className="text-sm whitespace-pre-wrap">{project.conditions}</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : null}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1390,6 +1473,7 @@ export default function ProjectDetails() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Funding Actions */}
+          {user?.data?.activeBranch === "Lender" && (
           <Card>
             <CardHeader>
               <CardTitle>Funding Actions</CardTitle>
@@ -1431,6 +1515,7 @@ export default function ProjectDetails() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Project Information */}
           <Card>
