@@ -10,9 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
-import { Check, ChevronDown, File, X } from 'lucide-react'
+import { Check, ChevronDown, File as FileIcon, X, Download } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import apiService from '@/services/api'
+import apiService, { api } from '@/services/api'
 import { alerts } from '@/lib/alerts'
 import { toast } from '@/hooks/use-toast'
 import { Spinner } from '@/components/ui/spinner'
@@ -55,8 +55,6 @@ type OrganizationForm = {
   // Conditional fields for Municipality
   state?: string
   district?: string
-  panDocumentMunicipality?: File | null
-  gstDocumentMunicipality?: File | null
 }
 
 export default function OrganizationsManagement() {
@@ -80,14 +78,15 @@ export default function OrganizationsManagement() {
     panDocument: null,
     gstDocument: null,
     state: '',
-    district: '',
-    panDocumentMunicipality: null,
-    gstDocumentMunicipality: null
+    district: ''
   })
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [selectedOrgType, setSelectedOrgType] = useState<string>('')
   const [orgTypeOpen, setOrgTypeOpen] = useState(false)
+  // Store existing document information for edit mode
+  const [existingPanDocument, setExistingPanDocument] = useState<any>(null)
+  const [existingGstDocument, setExistingGstDocument] = useState<any>(null)
 
   // Fetch organization types using Perdix API with parent_branch_id: 999
   const {
@@ -221,33 +220,42 @@ export default function OrganizationsManagement() {
         }
       }
 
-      // Convert pinCode to number and prepare API data
-      const apiData: any = {
-        ...formData,
-        pinCode: parseInt(formData.pinCode)
+      // Check if we need to send files - if yes, use FormData, otherwise use JSON
+      if (hasFiles()) {
+        // Use FormData when files are present
+        const formDataObj = buildFormData(false)
+        await apiService.post('/organizations/create', formDataObj, {
+          // axios will automatically set Content-Type to multipart/form-data for FormData
+        })
+      } else {
+        // Use JSON when no files are present (backward compatibility)
+        const apiData: any = {
+          bankId: formData.bankId,
+          parentBranchId: formData.parentBranchId,
+          branchName: formData.branchName,
+          branchMailId: formData.branchMailId,
+          pinCode: parseInt(formData.pinCode),
+          branchOpenDate: formData.branchOpenDate,
+          cashLimit: formData.cashLimit,
+          fingerPrintDeviceType: formData.fingerPrintDeviceType
+        }
+        
+        // Add conditional fields only if they exist
+        if (isLenderType()) {
+          apiData.lenderType = formData.lenderType
+          apiData.panNumber = formData.panNumber
+          apiData.gstNumber = formData.gstNumber
+        }
+        
+        if (isMunicipalityType()) {
+          apiData.state = formData.state
+          apiData.district = formData.district
+          apiData.panNumber = formData.panNumber
+          apiData.gstNumber = formData.gstNumber
+        }
+        
+        await apiService.post('/organizations/create', apiData)
       }
-      
-      // Remove file objects from API data (files should be handled separately via FormData if needed)
-      delete apiData.panDocument
-      delete apiData.gstDocument
-      delete apiData.panDocumentMunicipality
-      delete apiData.gstDocumentMunicipality
-      
-      // Add conditional fields only if they exist
-      if (isLenderType()) {
-        apiData.lenderType = formData.lenderType
-        apiData.panNumber = formData.panNumber
-        apiData.gstNumber = formData.gstNumber
-      }
-      
-      if (isMunicipalityType()) {
-        apiData.state = formData.state
-        apiData.district = formData.district
-        apiData.panNumber = formData.panNumber
-        apiData.gstNumber = formData.gstNumber
-      }
-      
-      await apiService.post('/organizations/create', apiData)
       alerts.success("Success", "Organization created successfully")
       setIsCreateDialogOpen(false)
       resetForm()
@@ -336,37 +344,45 @@ export default function OrganizationsManagement() {
       // Extract parentBranchId from selectedOrgType to ensure it's correct
       const parentBranchId = selectedOrgType ? parseInt(selectedOrgType.split('-')[0]) : formData.parentBranchId
       
-      // Convert pinCode to number and include id and version for API call
-      const apiData: any = {
-        ...formData,
-        id: editingOrganization.id,
-        version: editingOrganization.version,
-        pinCode: parseInt(formData.pinCode),
-        bankId: 1,
-        parentBranchId: parentBranchId // Ensure parentBranchId is patched from selectedOrgType
+      // Check if we need to send files - if yes, use FormData, otherwise use JSON
+      if (hasFiles()) {
+        // Use FormData when files are present
+        const formDataObj = buildFormData(true, parentBranchId, 1) // true = include id and version
+        
+        await apiService.put(`/organizations/organizations`, formDataObj, {
+          // axios will automatically set Content-Type to multipart/form-data for FormData
+        })
+      } else {
+        // Use JSON when no files are present (backward compatibility)
+        const apiData: any = {
+          id: editingOrganization.id,
+          version: editingOrganization.version,
+          bankId: 1,
+          parentBranchId: parentBranchId,
+          branchName: formData.branchName,
+          branchMailId: formData.branchMailId,
+          pinCode: parseInt(formData.pinCode),
+          branchOpenDate: formData.branchOpenDate,
+          cashLimit: formData.cashLimit,
+          fingerPrintDeviceType: formData.fingerPrintDeviceType
+        }
+        
+        // Add conditional fields only if they exist
+        if (isLenderType()) {
+          apiData.lenderType = formData.lenderType
+          apiData.panNumber = formData.panNumber
+          apiData.gstNumber = formData.gstNumber
+        }
+        
+        if (isMunicipalityType()) {
+          apiData.state = formData.state
+          apiData.district = formData.district
+          apiData.panNumber = formData.panNumber
+          apiData.gstNumber = formData.gstNumber
+        }
+        
+        await apiService.put(`/organizations/organizations`, apiData)
       }
-      
-      // Remove file objects from API data (files should be handled separately via FormData if needed)
-      delete apiData.panDocument
-      delete apiData.gstDocument
-      delete apiData.panDocumentMunicipality
-      delete apiData.gstDocumentMunicipality
-      
-      // Add conditional fields only if they exist
-      if (isLenderType()) {
-        apiData.lenderType = formData.lenderType
-        apiData.panNumber = formData.panNumber
-        apiData.gstNumber = formData.gstNumber
-      }
-      
-      if (isMunicipalityType()) {
-        apiData.state = formData.state
-        apiData.district = formData.district
-        apiData.panNumber = formData.panNumber
-        apiData.gstNumber = formData.gstNumber
-      }
-      
-      await apiService.put(`/organizations/organizations`, apiData)
       alerts.success("Success", "Organization updated successfully")
       setIsEditDialogOpen(false)
       setEditingOrganization(null)
@@ -397,12 +413,12 @@ export default function OrganizationsManagement() {
       panDocument: null,
       gstDocument: null,
       state: '',
-      district: '',
-      panDocumentMunicipality: null,
-      gstDocumentMunicipality: null
+      district: ''
     })
     setSelectedOrgType('')
     setOrgTypeOpen(false)
+    setExistingPanDocument(null)
+    setExistingGstDocument(null)
   }
 
   const openEditDialog = async (organization: Organization) => {
@@ -422,9 +438,7 @@ export default function OrganizationsManagement() {
       panDocument: null,
       gstDocument: null,
       state: '',
-      district: '',
-      panDocumentMunicipality: null,
-      gstDocumentMunicipality: null
+      district: ''
     })
     // Find the organization type for the selected parent branch ID
     // If organizationTypes is loaded, set it immediately, otherwise useEffect will handle it
@@ -449,9 +463,15 @@ export default function OrganizationsManagement() {
         state: orgDetails.state || '',
         district: orgDetails.district || ''
       }))
+      
+      // Store existing document information for download functionality
+      setExistingPanDocument(orgDetails.pan_document || null)
+      setExistingGstDocument(orgDetails.gst_document || null)
     } catch (err) {
       console.error('Error fetching organization details:', err)
       // Continue with opening the dialog even if details fetch fails
+      setExistingPanDocument(null)
+      setExistingGstDocument(null)
     }
     
     setIsEditDialogOpen(true)
@@ -486,6 +506,62 @@ export default function OrganizationsManagement() {
     return orgName.includes('municipality')
   }
 
+  // Helper function to check if there are any files to upload
+  const hasFiles = () => {
+    return !!(formData.panDocument || formData.gstDocument)
+  }
+
+  // Helper function to build FormData with all fields and files
+  const buildFormData = (includeIdAndVersion: boolean = false, overrideParentBranchId?: number, overrideBankId?: number): FormData => {
+    const formDataObj = new FormData()
+    
+    // Append basic fields
+    formDataObj.append('bankId', String(overrideBankId ?? formData.bankId))
+    formDataObj.append('parentBranchId', String(overrideParentBranchId ?? formData.parentBranchId))
+    formDataObj.append('branchName', formData.branchName)
+    formDataObj.append('branchMailId', formData.branchMailId)
+    formDataObj.append('pinCode', String(parseInt(formData.pinCode)))
+    formDataObj.append('branchOpenDate', formData.branchOpenDate)
+    formDataObj.append('cashLimit', String(formData.cashLimit))
+    formDataObj.append('fingerPrintDeviceType', formData.fingerPrintDeviceType)
+    
+    // Append id and version if editing
+    if (includeIdAndVersion && editingOrganization) {
+      formDataObj.append('id', String(editingOrganization.id))
+      formDataObj.append('version', String(editingOrganization.version))
+    }
+    
+    // Append conditional fields based on organization type
+    if (isLenderType()) {
+      if (formData.lenderType) formDataObj.append('lenderType', formData.lenderType)
+      if (formData.panNumber) formDataObj.append('panNumber', formData.panNumber)
+      if (formData.gstNumber) formDataObj.append('gstNumber', formData.gstNumber)
+      // Append files - ensure they are File instances
+      if (formData.panDocument instanceof File) {
+        formDataObj.append('panDocument', formData.panDocument, formData.panDocument.name)
+      }
+      if (formData.gstDocument instanceof File) {
+        formDataObj.append('gstDocument', formData.gstDocument, formData.gstDocument.name)
+      }
+    }
+    
+    if (isMunicipalityType()) {
+      if (formData.state) formDataObj.append('state', formData.state)
+      if (formData.district) formDataObj.append('district', formData.district)
+      if (formData.panNumber) formDataObj.append('panNumber', formData.panNumber)
+      if (formData.gstNumber) formDataObj.append('gstNumber', formData.gstNumber)
+      // Append files - ensure they are File instances
+      if (formData.panDocument instanceof File) {
+        formDataObj.append('panDocument', formData.panDocument, formData.panDocument.name)
+      }
+      if (formData.gstDocument instanceof File) {
+        formDataObj.append('gstDocument', formData.gstDocument, formData.gstDocument.name)
+      }
+    }
+    
+    return formDataObj
+  }
+
   // Helper function to format file size
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'
@@ -497,10 +573,43 @@ export default function OrganizationsManagement() {
 
   // Handle file change
   const handleFileChange = (
-    field: 'panDocument' | 'gstDocument' | 'panDocumentMunicipality' | 'gstDocumentMunicipality', 
+    field: 'panDocument' | 'gstDocument', 
     file: File | null
   ) => {
     setFormData(prev => ({ ...prev, [field]: file }))
+    // Clear existing document when user uploads a new file
+    if (file && field === 'panDocument') {
+      setExistingPanDocument(null)
+    }
+    if (file && field === 'gstDocument') {
+      setExistingGstDocument(null)
+    }
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      // Use axios directly to get blob response
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      // Create blob URL and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
   }
 
   const columns: ColumnDef<Organization, any>[] = useMemo(() => [
@@ -767,7 +876,7 @@ export default function OrganizationsManagement() {
                       {formData.panDocument && (
                         <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
+                            <FileIcon className="h-4 w-4" />
                             <span className="text-sm">{formData.panDocument.name}</span>
                             <span className="text-xs text-muted-foreground">
                               ({formatFileSize(formData.panDocument.size)})
@@ -807,7 +916,7 @@ export default function OrganizationsManagement() {
                       {formData.gstDocument && (
                         <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
+                            <FileIcon className="h-4 w-4" />
                             <span className="text-sm">{formData.gstDocument.name}</span>
                             <span className="text-xs text-muted-foreground">
                               ({formatFileSize(formData.gstDocument.size)})
@@ -910,25 +1019,25 @@ export default function OrganizationsManagement() {
                         accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null
-                          handleFileChange('panDocumentMunicipality', file)
+                          handleFileChange('panDocument', file)
                         }}
                         className="h-10"
                         disabled={submitting}
                       />
-                      {formData.panDocumentMunicipality && (
+                      {formData.panDocument && (
                         <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.panDocumentMunicipality.name}</span>
+                            <FileIcon className="h-4 w-4" />
+                            <span className="text-sm">{formData.panDocument.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.panDocumentMunicipality.size)})
+                              ({formatFileSize(formData.panDocument.size)})
                             </span>
                           </div>
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleFileChange('panDocumentMunicipality', null)}
+                            onClick={() => handleFileChange('panDocument', null)}
                             disabled={submitting}
                           >
                             <X className="h-4 w-4" />
@@ -950,25 +1059,25 @@ export default function OrganizationsManagement() {
                         accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null
-                          handleFileChange('gstDocumentMunicipality', file)
+                          handleFileChange('gstDocument', file)
                         }}
                         className="h-10"
                         disabled={submitting}
                       />
-                      {formData.gstDocumentMunicipality && (
+                      {formData.gstDocument && (
                         <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                           <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.gstDocumentMunicipality.name}</span>
+                            <FileIcon className="h-4 w-4" />
+                            <span className="text-sm">{formData.gstDocument.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.gstDocumentMunicipality.size)})
+                              ({formatFileSize(formData.gstDocument.size)})
                             </span>
                           </div>
                           <Button
                             type="button"
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleFileChange('gstDocumentMunicipality', null)}
+                            onClick={() => handleFileChange('gstDocument', null)}
                             disabled={submitting}
                           >
                             <X className="h-4 w-4" />
@@ -1039,6 +1148,8 @@ export default function OrganizationsManagement() {
           // Reset form and state when dialog closes
           resetForm()
           setEditingOrganization(null)
+          setExistingPanDocument(null)
+          setExistingGstDocument(null)
         }
       }}>
         <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
@@ -1239,81 +1350,145 @@ export default function OrganizationsManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="editPanDocument" className="text-sm font-medium">
-                        PAN Document Upload *
+                        PAN Document {existingPanDocument && !formData.panDocument ? '' : '*'}
                       </Label>
-                      <Input
-                        id="editPanDocument"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null
-                          handleFileChange('panDocument', file)
-                        }}
-                        className="h-10"
-                        disabled={submitting}
-                      />
-                      {formData.panDocument && (
-                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                          <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.panDocument.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.panDocument.size)})
-                            </span>
+                      {existingPanDocument && !formData.panDocument && (
+                        // Show download option if document exists and no new file uploaded
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-md border mb-2">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileIcon className="h-4 w-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{existingPanDocument.original_filename}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(existingPanDocument.file_size)} • {existingPanDocument.mime_type}
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleFileChange('panDocument', null)}
+                            onClick={() => handleDownloadFile(existingPanDocument.id, existingPanDocument.original_filename)}
                             disabled={submitting}
+                            className="ml-2 flex-shrink-0"
                           >
-                            <X className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
                           </Button>
                         </div>
                       )}
+                      {(!existingPanDocument || formData.panDocument) && (
+                        // Show upload input if no existing document or user wants to replace
+                        <>
+                          <Input
+                            id="editPanDocument"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFileChange('panDocument', file)
+                            }}
+                            className="h-10"
+                            disabled={submitting}
+                          />
+                          {formData.panDocument && (
+                            <div className="flex items-center justify-between p-2 bg-muted rounded-md mt-2">
+                              <div className="flex items-center space-x-2">
+                                <FileIcon className="h-4 w-4" />
+                                <span className="text-sm">{formData.panDocument.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({formatFileSize(formData.panDocument.size)})
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFileChange('panDocument', null)}
+                                disabled={submitting}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Upload PAN document (PDF, JPG, PNG)
+                        {existingPanDocument && !formData.panDocument 
+                          ? 'Click download to view existing document, or upload a new file to replace it'
+                          : 'Upload PAN document (PDF, JPG, PNG)'}
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="editGstDocument" className="text-sm font-medium">
-                        GST Document Upload *
+                        GST Document {existingGstDocument && !formData.gstDocument ? '' : '*'}
                       </Label>
-                      <Input
-                        id="editGstDocument"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null
-                          handleFileChange('gstDocument', file)
-                        }}
-                        className="h-10"
-                        disabled={submitting}
-                      />
-                      {formData.gstDocument && (
-                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                          <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.gstDocument.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.gstDocument.size)})
-                            </span>
+                      {existingGstDocument && !formData.gstDocument && (
+                        // Show download option if document exists and no new file uploaded
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-md border mb-2">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileIcon className="h-4 w-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{existingGstDocument.original_filename}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(existingGstDocument.file_size)} • {existingGstDocument.mime_type}
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleFileChange('gstDocument', null)}
+                            onClick={() => handleDownloadFile(existingGstDocument.id, existingGstDocument.original_filename)}
                             disabled={submitting}
+                            className="ml-2 flex-shrink-0"
                           >
-                            <X className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
                           </Button>
                         </div>
                       )}
+                      {(!existingGstDocument || formData.gstDocument) && (
+                        // Show upload input if no existing document or user wants to replace
+                        <>
+                          <Input
+                            id="editGstDocument"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFileChange('gstDocument', file)
+                            }}
+                            className="h-10"
+                            disabled={submitting}
+                          />
+                          {formData.gstDocument && (
+                            <div className="flex items-center justify-between p-2 bg-muted rounded-md mt-2">
+                              <div className="flex items-center space-x-2">
+                                <FileIcon className="h-4 w-4" />
+                                <span className="text-sm">{formData.gstDocument.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({formatFileSize(formData.gstDocument.size)})
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFileChange('gstDocument', null)}
+                                disabled={submitting}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Upload GST document (PDF, JPG, PNG)
+                        {existingGstDocument && !formData.gstDocument 
+                          ? 'Click download to view existing document, or upload a new file to replace it'
+                          : 'Upload GST document (PDF, JPG, PNG)'}
                       </p>
                     </div>
                   </div>
@@ -1390,81 +1565,145 @@ export default function OrganizationsManagement() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="editPanDocumentMunicipality" className="text-sm font-medium">
-                        PAN Document Upload *
+                        PAN Document {existingPanDocument && !formData.panDocument ? '' : '*'}
                       </Label>
-                      <Input
-                        id="editPanDocumentMunicipality"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null
-                          handleFileChange('panDocumentMunicipality', file)
-                        }}
-                        className="h-10"
-                        disabled={submitting}
-                      />
-                      {formData.panDocumentMunicipality && (
-                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                          <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.panDocumentMunicipality.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.panDocumentMunicipality.size)})
-                            </span>
+                      {existingPanDocument && !formData.panDocument && (
+                        // Show download option if document exists and no new file uploaded
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-md border mb-2">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileIcon className="h-4 w-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{existingPanDocument.original_filename}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(existingPanDocument.file_size)} • {existingPanDocument.mime_type}
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleFileChange('panDocumentMunicipality', null)}
+                            onClick={() => handleDownloadFile(existingPanDocument.id, existingPanDocument.original_filename)}
                             disabled={submitting}
+                            className="ml-2 flex-shrink-0"
                           >
-                            <X className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
                           </Button>
                         </div>
                       )}
+                      {(!existingPanDocument || formData.panDocument) && (
+                        // Show upload input if no existing document or user wants to replace
+                        <>
+                          <Input
+                            id="editPanDocumentMunicipality"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFileChange('panDocument', file)
+                            }}
+                            className="h-10"
+                            disabled={submitting}
+                          />
+                          {formData.panDocument && (
+                            <div className="flex items-center justify-between p-2 bg-muted rounded-md mt-2">
+                              <div className="flex items-center space-x-2">
+                                <FileIcon className="h-4 w-4" />
+                                <span className="text-sm">{formData.panDocument.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({formatFileSize(formData.panDocument.size)})
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFileChange('panDocument', null)}
+                                disabled={submitting}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Upload PAN document (PDF, JPG, PNG)
+                        {existingPanDocument && !formData.panDocument 
+                          ? 'Click download to view existing document, or upload a new file to replace it'
+                          : 'Upload PAN document (PDF, JPG, PNG)'}
                       </p>
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="editGstDocumentMunicipality" className="text-sm font-medium">
-                        GST Document Upload *
+                        GST Document {existingGstDocument && !formData.gstDocument ? '' : '*'}
                       </Label>
-                      <Input
-                        id="editGstDocumentMunicipality"
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0] || null
-                          handleFileChange('gstDocumentMunicipality', file)
-                        }}
-                        className="h-10"
-                        disabled={submitting}
-                      />
-                      {formData.gstDocumentMunicipality && (
-                        <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                          <div className="flex items-center space-x-2">
-                            <File className="h-4 w-4" />
-                            <span className="text-sm">{formData.gstDocumentMunicipality.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              ({formatFileSize(formData.gstDocumentMunicipality.size)})
-                            </span>
+                      {existingGstDocument && !formData.gstDocument && (
+                        // Show download option if document exists and no new file uploaded
+                        <div className="flex items-center justify-between p-3 bg-muted rounded-md border mb-2">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileIcon className="h-4 w-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{existingGstDocument.original_filename}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(existingGstDocument.file_size)} • {existingGstDocument.mime_type}
+                              </p>
+                            </div>
                           </div>
                           <Button
                             type="button"
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            onClick={() => handleFileChange('gstDocumentMunicipality', null)}
+                            onClick={() => handleDownloadFile(existingGstDocument.id, existingGstDocument.original_filename)}
                             disabled={submitting}
+                            className="ml-2 flex-shrink-0"
                           >
-                            <X className="h-4 w-4" />
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
                           </Button>
                         </div>
                       )}
+                      {(!existingGstDocument || formData.gstDocument) && (
+                        // Show upload input if no existing document or user wants to replace
+                        <>
+                          <Input
+                            id="editGstDocumentMunicipality"
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              handleFileChange('gstDocument', file)
+                            }}
+                            className="h-10"
+                            disabled={submitting}
+                          />
+                          {formData.gstDocument && (
+                            <div className="flex items-center justify-between p-2 bg-muted rounded-md mt-2">
+                              <div className="flex items-center space-x-2">
+                                <FileIcon className="h-4 w-4" />
+                                <span className="text-sm">{formData.gstDocument.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  ({formatFileSize(formData.gstDocument.size)})
+                                </span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleFileChange('gstDocument', null)}
+                                disabled={submitting}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        Upload GST document (PDF, JPG, PNG)
+                        {existingGstDocument && !formData.gstDocument 
+                          ? 'Click download to view existing document, or upload a new file to replace it'
+                          : 'Upload GST document (PDF, JPG, PNG)'}
                       </p>
                     </div>
                   </div>

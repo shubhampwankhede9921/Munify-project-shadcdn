@@ -17,9 +17,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { useParams, useNavigate } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import apiService from "@/services/api"
+import apiService, { api } from "@/services/api"
 import { Spinner } from "@/components/ui/spinner"
 
 import { Label } from "@/components/ui/label"
@@ -89,6 +89,39 @@ interface QuestionsListApiResponse {
   total?: number
 }
 
+interface ProjectDocument {
+  id: number
+  project_id: string
+  file_id: number
+  document_type: string
+  version: number
+  access_level: string
+  uploaded_by: string
+  created_at: string
+  created_by: string
+  updated_at: string
+  updated_by: string
+  file: {
+    id: number
+    organization_id: string
+    uploaded_by: string
+    filename: string
+    original_filename: string
+    mime_type: string
+    file_size: number
+    storage_path: string
+    checksum: string
+    access_level: string
+    download_count: number
+    is_deleted: boolean
+    deleted_at: string | null
+    created_at: string
+    created_by: string
+    updated_at: string
+    updated_by: string
+  }
+}
+
 interface ProjectApiResponse {
   status: string
   message: string
@@ -131,6 +164,7 @@ interface ProjectApiResponse {
     created_by: string
     updated_at: string
     updated_by: string | null
+    documents?: ProjectDocument[]
   }
 }
 
@@ -167,11 +201,13 @@ export default function ProjectDetails() {
   const [noteContent, setNoteContent] = useState("")
   const [fundingDialogOpen, setFundingDialogOpen] = useState(false)
 
-  // Fetch project data
+  // Fetch project data with documents
   const { data, isLoading, error, isError } = useQuery<ProjectApiResponse>({
     queryKey: ['project', id],
     queryFn: async () => {
-      return await apiService.get<ProjectApiResponse>(`/projects/${id}`)
+      return await apiService.get<ProjectApiResponse>(`/projects/${id}`, {
+        include_documents: true
+      })
     },
     enabled: !!id,
   })
@@ -441,6 +477,77 @@ export default function ProjectDetails() {
     })
   }
 
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      // Use axios directly to get blob response
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      // Create blob URL and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  // Get document type display name
+  const getDocumentTypeName = (documentType: string): string => {
+    const typeMap: Record<string, string> = {
+      'dpr': 'DPR (Detailed Project Report)',
+      'feasibility_study': 'Feasibility Study',
+      'compliance_certificate': 'Compliance Certificate',
+      'budget_approval': 'Budget Approval',
+      'tender_rfp': 'Tender / RFP',
+      'project_image': 'Project Image',
+      'optional_media': 'Media',
+    }
+    return typeMap[documentType] || documentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  // Filter documents by type
+  const documents = useMemo(() => {
+    if (!project?.documents) return []
+    return project.documents.filter(doc => 
+      ['dpr', 'feasibility_study', 'compliance_certificate', 'budget_approval', 'tender_rfp'].includes(doc.document_type)
+    )
+  }, [project?.documents])
+
+  // Filter media files (optional_media and project_image)
+  const mediaFiles = useMemo(() => {
+    if (!project?.documents) return []
+    return project.documents.filter(doc => 
+      ['optional_media', 'project_image'].includes(doc.document_type)
+    )
+  }, [project?.documents])
+
+  // Get project image for banner (for now using fallback, can be enhanced later)
+  const projectImageBanner = useMemo(() => {
+    // For now, we'll use the fallback. Later we can construct image URL from file_id if backend provides it
+    return "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1600&h=900&fit=crop&q=80"
+  }, [project?.documents])
+
   // Calculate days left
   const getDaysLeft = (endDate: string | null | undefined) => {
     if (!endDate) return null
@@ -622,28 +729,6 @@ export default function ProjectDetails() {
   const fundingProgress = project.funding_percentage || 
     (parseFloat(project.funding_raised || '0') / parseFloat(project.funding_requirement || '1')) * 100
 
-  // Project image - fallback image for now
-  // TODO: When API provides image field, update: const projectImage = project.image_url || fallbackImage
-  const projectImage = "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=1600&h=900&fit=crop&q=80"
-
-  // Dummy data for Documents and Media (to be replaced with API data later)
-  const dummyDocuments = [
-    { id: 1, name: "Project Proposal Document", type: "PDF", size: "2.3 MB", uploadedDate: "2025-01-15" },
-    { id: 2, name: "Financial Projections & Budget", type: "Excel", size: "1.1 MB", uploadedDate: "2025-01-15" },
-    { id: 3, name: "Technical Specifications", type: "PDF", size: "4.2 MB", uploadedDate: "2025-01-16" },
-    { id: 4, name: "Environmental Impact Assessment", type: "PDF", size: "3.1 MB", uploadedDate: "2025-01-17" },
-    { id: 5, name: "Feasibility Study Report", type: "PDF", size: "5.8 MB", uploadedDate: "2025-01-18" },
-    { id: 6, name: "Municipal Approval Letter", type: "PDF", size: "0.8 MB", uploadedDate: "2025-01-20" }
-  ]
-
-  const dummyMedia = [
-    { id: 1, type: "video", title: "Project Overview Video", duration: "5:30", thumbnail: "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=200&fit=crop" },
-    { id: 2, type: "image", title: "Site Survey Photos", count: 12, thumbnail: "https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&h=200&fit=crop" },
-    { id: 3, type: "video", title: "Municipal Commissioner Interview", duration: "8:45", thumbnail: "https://images.unsplash.com/photo-1581578731548-c6a0c3f2f4c1?w=400&h=200&fit=crop" },
-    { id: 4, type: "audio", title: "Stakeholder Meeting Recording", duration: "12:15", thumbnail: null },
-    { id: 5, type: "image", title: "Progress Photos", count: 8, thumbnail: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=400&h=200&fit=crop" }
-  ]
-
   return (
     <div className="space-y-6">
       <Dialog open={isNoteDialogOpen} onOpenChange={(open) => !open ? handleCloseNoteDialog() : setIsNoteDialogOpen(true)}>
@@ -725,7 +810,7 @@ export default function ProjectDetails() {
         <div className="relative h-64 md:h-80 overflow-hidden bg-gradient-to-br from-blue-500 to-blue-700">
           {/* Project Image with Fallback */}
           <img 
-            src={projectImage}
+            src={projectImageBanner}
             alt={project.title}
             className="w-full h-full object-cover"
             onError={(e) => {
@@ -1025,27 +1110,38 @@ export default function ProjectDetails() {
                   <CardTitle>Project Documents</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {dummyDocuments.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center space-x-3 flex-1">
-                          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                            <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{doc.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {doc.type} • {doc.size} • {formatDate(doc.uploadedDate)}
+                  {documents.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      No documents available for this project.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {documents.map((doc: ProjectDocument) => (
+                        <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
+                              <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-medium truncate">{doc.file.original_filename || doc.file.filename}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {getDocumentTypeName(doc.document_type)} • {formatFileSize(doc.file.file_size)} • {formatDate(doc.created_at)}
+                              </div>
                             </div>
                           </div>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="ml-4 flex-shrink-0"
+                            onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
                         </div>
-                        <Button variant="outline" size="sm" className="ml-4">
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -1056,49 +1152,68 @@ export default function ProjectDetails() {
                   <CardTitle>Project Media</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4">
-                    {dummyMedia.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex items-center space-x-3 flex-1">
-                          <div className="relative">
-                            {item.thumbnail ? (
-                              <img 
-                                src={item.thumbnail} 
-                                alt={item.title}
-                                className="w-16 h-16 object-cover rounded-lg"
-                              />
-                            ) : (
-                              <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                                {item.type === "video" && <Video className="h-6 w-6 text-red-600" />}
-                                {item.type === "image" && <Image className="h-6 w-6 text-green-600" />}
-                                {item.type === "audio" && <Mic className="h-6 w-6 text-purple-600" />}
+                  {mediaFiles.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      No media files available for this project.
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {mediaFiles.map((doc: ProjectDocument) => {
+                        const isImage = doc.file.mime_type.startsWith('image/')
+                        const isVideo = doc.file.mime_type.startsWith('video/')
+                        const isAudio = doc.file.mime_type.startsWith('audio/')
+                        
+                        return (
+                          <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                              <div className="relative flex-shrink-0">
+                                {isImage ? (
+                                  <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                                    <Image className="h-6 w-6 text-green-600" />
+                                  </div>
+                                ) : isVideo ? (
+                                  <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center relative">
+                                    <Video className="h-6 w-6 text-red-600" />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                                      <Play className="h-5 w-5 text-white" />
+                                    </div>
+                                  </div>
+                                ) : isAudio ? (
+                                  <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                                    <Mic className="h-6 w-6 text-purple-600" />
+                                  </div>
+                                ) : (
+                                  <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+                                    <FileText className="h-6 w-6 text-blue-600" />
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {item.type === "video" && (
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
-                                <Play className="h-5 w-5 text-white" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {isVideo && <Video className="h-4 w-4 text-red-600 flex-shrink-0" />}
+                                  {isImage && <Image className="h-4 w-4 text-green-600 flex-shrink-0" />}
+                                  {isAudio && <Mic className="h-4 w-4 text-purple-600 flex-shrink-0" />}
+                                  <div className="font-medium truncate">{doc.file.original_filename || doc.file.filename}</div>
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {getDocumentTypeName(doc.document_type)} • {formatFileSize(doc.file.file_size)} • {formatDate(doc.created_at)}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              {item.type === "video" && <Video className="h-4 w-4 text-red-600" />}
-                              {item.type === "image" && <Image className="h-4 w-4 text-green-600" />}
-                              {item.type === "audio" && <Mic className="h-4 w-4 text-purple-600" />}
-                              <div className="font-medium truncate">{item.title}</div>
                             </div>
-                            <div className="text-sm text-muted-foreground">
-                              {item.duration || `${item.count} items`}
-                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="ml-4 flex-shrink-0"
+                              onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </Button>
                           </div>
-                        </div>
-                        <Button variant="outline" size="sm" className="ml-4">
-                          <Play className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
