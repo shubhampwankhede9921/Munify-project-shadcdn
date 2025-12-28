@@ -1358,6 +1358,7 @@ export default function ProjectDetails() {
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Funding Actions */}
+          {user?.data?.activeBranch === "Lender" && (
           <Card>
             <CardHeader>
               <CardTitle>Funding Actions</CardTitle>
@@ -1399,6 +1400,7 @@ export default function ProjectDetails() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Project Information */}
           <Card>
