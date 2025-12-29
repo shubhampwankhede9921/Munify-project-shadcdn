@@ -33,4 +33,5 @@ export { default as RolesManagement } from "../features/master/pages/RolesManage
 export { default as OrganizationsManagement } from "../features/master/pages/OrganizationsManagement"
 export { default as CommonMasterExcel } from "../features/master/pages/CommonMasterExcel"
 export { default as InvitationsManagement } from "../features/users/pages/InvitationsManagement"
+export { default as ProjectFiltersShowcase } from "../features/components/pages/ProjectFiltersShowcase"
 
