@@ -99,6 +99,7 @@ const data = {
       icon: Table,
       items: [
         { title: "Data Table", url: "/main/components/datatable" },
+        { title: "Project Filters", url: "/main/components/filters" },
       ],
     },
   ],

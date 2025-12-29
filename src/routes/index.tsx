@@ -36,6 +36,7 @@ import {
   RolesManagement,
   OrganizationsManagement,
   CommonMasterExcel,
+  ProjectFiltersShowcase,
 } from "@/pages";
 
 export const router = createBrowserRouter([
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
       { path: "demo", element: <Projects /> },
       { path: "designs/cards", element: <CardShowcase /> },
       { path: "components/datatable", element: <DataTableReference /> },
+      { path: "components/filters", element: <ProjectFiltersShowcase /> },
       { path: "master/roles", element: <RolesManagement /> },
       { path: "master/organizations", element: <OrganizationsManagement /> },
       { path: "master/common-excel", element: <CommonMasterExcel /> },
