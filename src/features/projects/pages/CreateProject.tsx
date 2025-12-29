@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight, Check, ChevronDown, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Save, FileText, DollarSign, Image as ImageIcon, MapPin, User, Building2, X, Video, File, CheckCircle2, Circle, ChevronLeft, ChevronRight, Check, ChevronDown, AlertTriangle, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { Spinner } from '@/components/ui/spinner'
 import { alerts } from '@/lib/alerts'
-import apiService from '@/services/api'
+import apiService, { api } from '@/services/api'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
 
@@ -86,16 +86,30 @@ interface FormData {
   city: string
   ward: string
   
-  // Documentation (File objects)
+  // Documentation (File objects for new uploads)
   dprFile: File | null
   feasibilityStudyFile: File | null
   complianceCertificatesFile: File | null
   budgetApprovalsFile: File | null
   tenderRfpFile: File | null
   
-  // Media
+  // Documentation (File IDs from API - numbers as per backend)
+  dprFileId: number | null
+  feasibilityStudyFileId: number | null
+  complianceCertificatesFileId: number | null
+  budgetApprovalsFileId: number | null
+  tenderRfpFileId: number | null
+  
+  // Media (File objects for new uploads)
   projectImage: File | null
   optionalMedia: File[] // Array for multiple files
+  
+  // Media (File IDs from API - numbers as per backend)
+  projectImageId: number | null
+  optionalMediaIds: number[]
+  
+  // Draft ID for file uploads
+  draftId: number | null
 }
 
 export default function CreateProject() {
@@ -116,6 +130,27 @@ export default function CreateProject() {
   const [ownershipOpen, setOwnershipOpen] = useState(false)
   const [municipalityOpen, setMunicipalityOpen] = useState(false)
   const { user } = useAuth()
+  
+  // Track which file is currently being deleted to prevent double calls
+  const [deletingFileId, setDeletingFileId] = useState<number | null>(null)
+  
+  // State for existing file metadata (for display and download)
+  interface FileMetadata {
+    id: number
+    name: string
+    size: number
+    type: string
+    documentType: string
+  }
+  const [existingFilesMetadata, setExistingFilesMetadata] = useState<Record<string, FileMetadata | null>>({
+    dprFile: null,
+    feasibilityStudyFile: null,
+    complianceCertificatesFile: null,
+    budgetApprovalsFile: null,
+    tenderRfpFile: null,
+    projectImage: null,
+  })
+  const [existingOptionalMediaMetadata, setExistingOptionalMediaMetadata] = useState<FileMetadata[]>([])
   // Check if we're editing a rejected project
   useEffect(() => {
     const isRejected = location.pathname.includes('/rejected/')
@@ -258,14 +293,9 @@ export default function CreateProject() {
     }
   }, [draftId])
   
-  // Generate a mock reference ID (in real app, this would come from backend)
-  const projectReferenceId = useMemo(() => {
-    return `PRJ-${Date.now().toString().slice(-8)}`
-  }, [])
-
   const [formData, setFormData] = useState<FormData>({
     projectTitle: '',
-    projectReferenceId: projectReferenceId,
+    projectReferenceId: '', // Will be set by backend when draft is created or file is uploaded
     municipalityId: '',
     department: '',
     contactPersonName: '',
@@ -301,8 +331,16 @@ export default function CreateProject() {
     complianceCertificatesFile: null,
     budgetApprovalsFile: null,
     tenderRfpFile: null,
+    dprFileId: null,
+    feasibilityStudyFileId: null,
+    complianceCertificatesFileId: null,
+    budgetApprovalsFileId: null,
+    tenderRfpFileId: null,
     projectImage: null,
     optionalMedia: [],
+    projectImageId: null,
+    optionalMediaIds: [],
+    draftId: null,
   })
 
   // Calculate commitment gap
@@ -364,6 +402,14 @@ export default function CreateProject() {
       state: formData.state || undefined,
       city: formData.city || undefined,
       ward: formData.ward || undefined,
+      // File IDs
+      dpr_file_id: formData.dprFileId || undefined,
+      feasibility_study_file_id: formData.feasibilityStudyFileId || undefined,
+      compliance_certificates_file_id: formData.complianceCertificatesFileId || undefined,
+      budget_approvals_file_id: formData.budgetApprovalsFileId || undefined,
+      tender_rfp_file_id: formData.tenderRfpFileId || undefined,
+      project_image_id: formData.projectImageId || undefined,
+      optional_media_ids: formData.optionalMediaIds.length > 0 ? formData.optionalMediaIds : undefined,
       created_by: createdBy,
     }
   }
@@ -424,6 +470,14 @@ export default function CreateProject() {
       visibility: 'public', // Default to private for MVP
       approved_by: null, // Will be set by backend on approval
       admin_notes: '', // Empty for new projects
+      // File IDs
+      dpr_file_id: formData.dprFileId || undefined,
+      feasibility_study_file_id: formData.feasibilityStudyFileId || undefined,
+      compliance_certificates_file_id: formData.complianceCertificatesFileId || undefined,
+      budget_approvals_file_id: formData.budgetApprovalsFileId || undefined,
+      tender_rfp_file_id: formData.tenderRfpFileId || undefined,
+      project_image_id: formData.projectImageId || undefined,
+      optional_media_ids: formData.optionalMediaIds.length > 0 ? formData.optionalMediaIds : undefined,
       created_by: createdBy,
     }
   }
@@ -505,8 +559,81 @@ export default function CreateProject() {
           state: item.state ?? prev.state,
           city: item.city ?? prev.city,
           ward: item.ward ?? prev.ward,
+          // Draft ID (project_reference_id already set above on line 512)
+          draftId: !isProject ? (item.id ? parseInt(String(item.id), 10) : null) : prev.draftId,
+          // File IDs - Parse from documents array if available, otherwise use direct fields
+          dprFileId: item.dpr_file_id ?? prev.dprFileId,
+          feasibilityStudyFileId: item.feasibility_study_file_id ?? prev.feasibilityStudyFileId,
+          complianceCertificatesFileId: item.compliance_certificates_file_id ?? prev.complianceCertificatesFileId,
+          budgetApprovalsFileId: item.budget_approvals_file_id ?? prev.budgetApprovalsFileId,
+          tenderRfpFileId: item.tender_rfp_file_id ?? prev.tenderRfpFileId,
+          projectImageId: item.project_image_id ?? prev.projectImageId,
+          optionalMediaIds: item.optional_media_ids ?? prev.optionalMediaIds,
         }
       })
+      
+      // Parse documents array if available (new backend format)
+      if (item.documents && Array.isArray(item.documents)) {
+        const fileMetadataMap: Record<string, FileMetadata | null> = {
+          dprFile: null,
+          feasibilityStudyFile: null,
+          complianceCertificatesFile: null,
+          budgetApprovalsFile: null,
+          tenderRfpFile: null,
+          projectImage: null,
+        }
+        const optionalMediaMetadata: FileMetadata[] = []
+        
+        // Map document_type to form field names
+        const documentTypeToField: Record<string, string> = {
+          'dpr': 'dprFile',
+          'feasibility_study': 'feasibilityStudyFile',
+          'compliance_certificate': 'complianceCertificatesFile',
+          'budget_approval': 'budgetApprovalsFile',
+          'tender_rfp': 'tenderRfpFile',
+          'project_image': 'projectImage',
+        }
+        
+        item.documents.forEach((doc: any) => {
+          const fieldName = documentTypeToField[doc.document_type]
+          const file = doc.file
+          
+          if (file && file.id) {
+            const metadata: FileMetadata = {
+              id: file.id,
+              name: file.original_filename || file.filename || 'Unknown file',
+              size: file.file_size || 0,
+              type: file.mime_type || 'application/octet-stream',
+              documentType: doc.document_type,
+            }
+            
+            if (fieldName) {
+              // Single file field
+              fileMetadataMap[fieldName] = metadata
+              
+              // Update formData with file ID
+              const fieldIdKey = `${fieldName}Id` as keyof FormData
+              setFormData(prev => ({
+                ...prev,
+                [fieldIdKey]: file.id,
+              }))
+            } else if (doc.document_type === 'optional_media') {
+              // Optional media (multiple files)
+              optionalMediaMetadata.push(metadata)
+              
+              // Update formData with file ID
+              setFormData(prev => ({
+                ...prev,
+                optionalMediaIds: [...prev.optionalMediaIds, file.id],
+              }))
+            }
+          }
+        })
+        
+        // Update metadata state
+        setExistingFilesMetadata(fileMetadataMap)
+        setExistingOptionalMediaMetadata(optionalMediaMetadata)
+      }
       
       if (!isProject) {
         setCurrentDraftId(String(item.id))
@@ -547,11 +674,21 @@ export default function CreateProject() {
       const response = (data as any)?.data || data
       const draftId = response?.id || currentDraftId
       
+      // Extract project_reference_id from response (backend now includes it)
+      const projectReferenceId = (data as any)?.project_reference_id || response?.project_reference_id || formData.projectReferenceId
+      
       if (draftId && !currentDraftId) {
         setCurrentDraftId(String(draftId))
         // Update URL without navigation
         window.history.replaceState({}, '', `/main/admin/projects/create/${draftId}`)
       }
+      
+      // Store project_reference_id and draftId in form state
+      setFormData(prev => ({
+        ...prev,
+        projectReferenceId: projectReferenceId || prev.projectReferenceId,
+        draftId: draftId ? parseInt(String(draftId), 10) : prev.draftId,
+      }))
       
       // Invalidate both the list query and the specific draft query
       queryClient.invalidateQueries({ queryKey: ['project-drafts'] })
@@ -651,6 +788,14 @@ export default function CreateProject() {
       state: formData.state || undefined,
       city: formData.city || undefined,
       ward: formData.ward || undefined,
+      // File IDs
+      dpr_file_id: formData.dprFileId || undefined,
+      feasibility_study_file_id: formData.feasibilityStudyFileId || undefined,
+      compliance_certificates_file_id: formData.complianceCertificatesFileId || undefined,
+      budget_approvals_file_id: formData.budgetApprovalsFileId || undefined,
+      tender_rfp_file_id: formData.tenderRfpFileId || undefined,
+      project_image_id: formData.projectImageId || undefined,
+      optional_media_ids: formData.optionalMediaIds.length > 0 ? formData.optionalMediaIds : undefined,
     }
   }
 
@@ -668,6 +813,119 @@ export default function CreateProject() {
     },
     onError: (error: any) => {
       const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to resubmit project. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Map field names to backend document_type values
+  const getDocumentType = (field: string): string => {
+    const documentTypeMap: Record<string, string> = {
+      'dprFile': 'dpr',
+      'feasibilityStudyFile': 'feasibility_study',
+      'complianceCertificatesFile': 'compliance_certificate',
+      'budgetApprovalsFile': 'budget_approval',
+      'tenderRfpFile': 'tender_rfp',
+      'projectImage': 'project_image',
+      'optionalMedia': 'optional_media',
+    }
+    return documentTypeMap[field] || field
+  }
+
+  // Mutation for uploading a single file
+  const uploadFileMutation = useMutation({
+    mutationFn: async ({ 
+      file, 
+      documentType, 
+      organizationId,
+      projectReferenceId,
+      draftId 
+    }: { 
+      file: File
+      documentType: string
+      organizationId: string
+      projectReferenceId?: string | null
+      draftId?: number | null
+    }) => {
+      const formDataObj = new FormData()
+      formDataObj.append('file', file)
+      formDataObj.append('document_type', documentType)
+      formDataObj.append('organization_id', organizationId)
+      formDataObj.append('access_level', 'public')
+      formDataObj.append('auto_create_draft', 'true')
+      
+      // Add project_reference_id or draft_id if available
+      if (projectReferenceId) {
+        formDataObj.append('project_reference_id', projectReferenceId)
+      } else if (draftId) {
+        formDataObj.append('draft_id', draftId.toString())
+      }
+      
+      // apiService.post() handles FormData automatically
+      const response = await apiService.post('/projects/files/upload', formDataObj)
+      
+      // Backend response structure: { status: "success", data: { file_id: number, project_reference_id: string } }
+      return {
+        fileId: response?.data?.file_id || response?.data?.data?.file_id,
+        projectReferenceId: response?.data?.project_reference_id || response?.data?.data?.project_reference_id || response?.project_reference_id,
+      }
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to upload file. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Mutation for deleting a single file
+  const deleteFileMutation = useMutation({
+    mutationFn: async ({ fileId }: { fileId: number }) => {
+      // Delete endpoint: DELETE /projects/files/{file_id}
+      return apiService.delete(`/projects/files/${fileId}`)
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to delete file. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  // Mutation for uploading multiple files (for optional media)
+  const uploadMultipleFilesMutation = useMutation({
+    mutationFn: async ({ 
+      files, 
+      documentType,
+      organizationId,
+      projectReferenceId,
+      draftId
+    }: { 
+      files: File[]
+      documentType: string
+      organizationId: string
+      projectReferenceId?: string | null
+      draftId?: number | null
+    }) => {
+      const uploadPromises = files.map(async (file) => {
+        const formDataObj = new FormData()
+        formDataObj.append('file', file)
+        formDataObj.append('document_type', documentType)
+        formDataObj.append('organization_id', organizationId)
+        formDataObj.append('access_level', 'public')
+        formDataObj.append('auto_create_draft', 'true')
+        
+        if (projectReferenceId) {
+          formDataObj.append('project_reference_id', projectReferenceId)
+        } else if (draftId) {
+          formDataObj.append('draft_id', draftId.toString())
+        }
+        
+        const response = await apiService.post('/projects/files/upload', formDataObj)
+        return {
+          fileId: response?.data?.file_id || response?.data?.data?.file_id,
+          projectReferenceId: response?.data?.project_reference_id || response?.data?.data?.project_reference_id || response?.project_reference_id,
+        }
+      })
+      return Promise.all(uploadPromises)
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Failed to upload files. Please try again.'
       alerts.error('Error', errorMessage)
     },
   })
@@ -698,9 +956,54 @@ export default function CreateProject() {
     }
   }
 
-  // File handling functions
-  const handleFileChange = (field: 'projectImage' | 'dprFile' | 'feasibilityStudyFile' | 'complianceCertificatesFile' | 'budgetApprovalsFile' | 'tenderRfpFile', file: File | null) => {
+  // File handling functions with upload support
+  const handleFileChange = async (
+    field: 'projectImage' | 'dprFile' | 'feasibilityStudyFile' | 'complianceCertificatesFile' | 'budgetApprovalsFile' | 'tenderRfpFile',
+    file: File | null
+  ) => {
+    const fieldIdKey = `${field}Id` as keyof FormData
+    const existingFileId = formData[fieldIdKey] as number | null
+    
+    // Get organization ID (municipalityId)
+    const organizationId = formData.municipalityId
+    if (!organizationId && file) {
+      alerts.error('Error', 'Please select a municipality before uploading files.')
+      return
+    }
+    
+    // If replacing existing file, delete old one first
+    if (file && existingFileId) {
+      // Prevent double delete calls
+      if (deletingFileId === existingFileId) {
+        console.log('Delete already in progress for file:', existingFileId)
+        return
+      }
+      
+      try {
+        // Mark this file as being deleted
+        setDeletingFileId(existingFileId)
+        
+        // Call delete API
+        await deleteFileMutation.mutateAsync({ 
+          fileId: existingFileId
+        })
+        
+        // Clear state after successful delete
+        setFormData(prev => ({ ...prev, [fieldIdKey]: null }))
+        setExistingFilesMetadata(prev => ({ ...prev, [field]: null }))
+      } catch (error) {
+        // Continue with upload even if delete fails
+        console.error('Failed to delete old file:', error)
+      } finally {
+        // Clear deleting flag
+        setDeletingFileId(null)
+      }
+    }
+    
+    // Update UI immediately (existing behavior)
     setFormData(prev => ({ ...prev, [field]: file }))
+    
+    // Clear error (existing behavior)
     if (errors[field]) {
       setErrors(prev => {
         const newErrors = { ...prev }
@@ -708,15 +1011,110 @@ export default function CreateProject() {
         return newErrors
       })
     }
+    
+    // Upload file if provided
+    if (file) {
+      try {
+        const documentType = getDocumentType(field)
+        const result = await uploadFileMutation.mutateAsync({ 
+          file, 
+          documentType,
+          organizationId,
+          projectReferenceId: formData.projectReferenceId,
+          draftId: currentDraftId ? parseInt(currentDraftId, 10) : null
+        })
+        
+        // Store file ID and project_reference_id, clear File object after successful upload
+        setFormData(prev => ({
+          ...prev,
+          [fieldIdKey]: result.fileId,
+          [field]: null, // Clear File object after successful upload
+          projectReferenceId: result.projectReferenceId || prev.projectReferenceId,
+          draftId: result.projectReferenceId ? prev.draftId : prev.draftId, // Keep draftId if project_reference_id was returned
+        }))
+        
+        // Update metadata with new file info
+        if (result.fileId) {
+          setExistingFilesMetadata(prev => ({
+            ...prev,
+            [field]: {
+              id: result.fileId!,
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              documentType: documentType,
+            }
+          }))
+        }
+        
+        // Update currentDraftId if project_reference_id was returned (draft was auto-created)
+        if (result.projectReferenceId && !currentDraftId) {
+          // Draft was auto-created, but we don't have draftId yet
+          // It will be set when user saves draft
+        }
+        
+        alerts.success('Success', 'File uploaded successfully')
+      } catch (error) {
+        // Remove file on upload failure
+        setFormData(prev => ({ ...prev, [field]: null }))
+      }
+    } else {
+      // File removed - delete from server if uploaded
+      if (existingFileId) {
+        // Prevent double delete calls
+        if (deletingFileId === existingFileId) {
+          console.log('Delete already in progress for file:', existingFileId)
+          return
+        }
+        
+        try {
+          // Mark this file as being deleted
+          setDeletingFileId(existingFileId)
+          
+          // Clear state immediately to prevent UI issues
+          setFormData(prev => ({ ...prev, [fieldIdKey]: null }))
+          setExistingFilesMetadata(prev => ({ ...prev, [field]: null }))
+          
+          // Call delete API
+          await deleteFileMutation.mutateAsync({ 
+            fileId: existingFileId
+          })
+          
+          alerts.success('Success', 'File removed successfully')
+        } catch (error) {
+          // Restore state if delete fails
+          setFormData(prev => ({ ...prev, [fieldIdKey]: existingFileId }))
+          console.error('Failed to delete file:', error)
+          alerts.warn('Warning', 'File removed from form but could not be deleted from server.')
+        } finally {
+          // Clear deleting flag
+          setDeletingFileId(null)
+        }
+      } else {
+        // Clear file ID and metadata even if no fileId (for newly selected files that weren't uploaded yet)
+        setFormData(prev => ({ ...prev, [fieldIdKey]: null }))
+        setExistingFilesMetadata(prev => ({ ...prev, [field]: null }))
+      }
+    }
   }
 
-  const handleMultipleFilesChange = (files: FileList | null) => {
+  const handleMultipleFilesChange = async (files: FileList | null) => {
     if (!files) return
     const newFiles = Array.from(files)
+    
+    // Get organization ID (municipalityId)
+    const organizationId = formData.municipalityId
+    if (!organizationId) {
+      alerts.error('Error', 'Please select a municipality before uploading files.')
+      return
+    }
+    
+    // Update UI immediately
     setFormData(prev => ({
       ...prev,
       optionalMedia: [...prev.optionalMedia, ...newFiles]
     }))
+    
     if (errors.optionalMedia) {
       setErrors(prev => {
         const newErrors = { ...prev }
@@ -724,13 +1122,80 @@ export default function CreateProject() {
         return newErrors
       })
     }
+    
+    // Upload files
+    try {
+      const results = await uploadMultipleFilesMutation.mutateAsync({
+        files: newFiles,
+        documentType: 'optional_media',
+        organizationId,
+        projectReferenceId: formData.projectReferenceId,
+        draftId: currentDraftId ? parseInt(currentDraftId, 10) : null
+      })
+      
+      // Extract file IDs and project_reference_id
+      const fileIds = results.map(r => r.fileId).filter(Boolean) as number[]
+      const projectReferenceId = results[0]?.projectReferenceId || formData.projectReferenceId
+      
+      // Create metadata for newly uploaded files
+      const newFileMetadata: FileMetadata[] = newFiles.map((file, idx) => ({
+        id: fileIds[idx],
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        documentType: 'optional_media',
+      }))
+      
+      // Store file IDs and project_reference_id, clear File objects, and add metadata
+      setFormData(prev => ({
+        ...prev,
+        optionalMediaIds: [...prev.optionalMediaIds, ...fileIds],
+        optionalMedia: prev.optionalMedia.filter((_, i) => i < prev.optionalMedia.length - newFiles.length),
+        projectReferenceId: projectReferenceId || prev.projectReferenceId,
+      }))
+      
+      // Add metadata for newly uploaded files
+      setExistingOptionalMediaMetadata(prev => [...prev, ...newFileMetadata])
+      
+      alerts.success('Success', `${newFiles.length} file(s) uploaded successfully`)
+    } catch (error) {
+      // Remove files on upload failure
+      setFormData(prev => ({
+        ...prev,
+        optionalMedia: prev.optionalMedia.filter((_, i) => i < prev.optionalMedia.length - newFiles.length)
+      }))
+    }
   }
 
-  const removeOptionalMedia = (index: number) => {
+  const removeOptionalMedia = async (index: number) => {
+    // Get fileId from metadata array (for existing files) or from formData (for newly uploaded)
+    const fileMetadata = existingOptionalMediaMetadata[index]
+    const fileId = fileMetadata?.id || formData.optionalMediaIds[index]
+    
+    // Remove from UI immediately
     setFormData(prev => ({
       ...prev,
-      optionalMedia: prev.optionalMedia.filter((_, i) => i !== index)
+      optionalMedia: prev.optionalMedia.filter((_, i) => i !== index),
+      optionalMediaIds: prev.optionalMediaIds.filter((_, i) => i !== index)
     }))
+    
+    // Remove from metadata if it exists
+    if (fileMetadata) {
+      setExistingOptionalMediaMetadata(prev => prev.filter((_, i) => i !== index))
+    }
+    
+    // Delete from server if uploaded
+    if (fileId) {
+      try {
+        await deleteFileMutation.mutateAsync({ 
+          fileId
+        })
+        alerts.success('Success', 'File removed successfully')
+      } catch (error) {
+        console.error('Failed to delete file:', error)
+        alerts.warn('Warning', 'File removed from form but could not be deleted from server.')
+      }
+    }
   }
 
   // Helper function to format file size
@@ -740,6 +1205,32 @@ export default function CreateProject() {
     const sizes = ['Bytes', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      // Use axios directly to get blob response
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      // Create blob URL and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
   }
 
   // Helper function to get file type icon
@@ -902,8 +1393,15 @@ export default function CreateProject() {
       newErrors.ward = 'Ward is required'
     }
 
-    // Documentation and Media - Skipped for MVP phase
-    // Will be added in next phase
+    // Documentation - DPR File is required (marked with * in UI)
+    if (!formData.dprFileId) {
+      newErrors.dprFile = 'DPR file is required'
+    }
+
+    // Media - Project Image is required (marked with * in UI)
+    if (!formData.projectImageId) {
+      newErrors.projectImage = 'Project image is required'
+    }
 
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -949,11 +1447,13 @@ export default function CreateProject() {
           formData.ward.trim()
         )
       case 'documentation':
-        // Documentation optional for MVP
-        return true
+        // DPR File is required (marked with * in UI)
+        // Other documentation files are optional
+        return !!formData.dprFileId
       case 'media':
-        // Media optional for MVP
-        return true
+        // Project Image is required (marked with * in UI)
+        // Optional media files are optional
+        return !!formData.projectImageId
       default:
         return false
     }
@@ -2085,17 +2585,64 @@ export default function CreateProject() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="dprFile">Detailed Project Report (DPR) *</Label>
-                <Input
-                  id="dprFile"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    handleFileChange('dprFile', file)
-                  }}
-                  className={errors.dprFile ? 'border-red-500' : ''}
-                />
-                {formData.dprFile && (
+                {!formData.dprFileId && (
+                  <Input
+                    id="dprFile"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      handleFileChange('dprFile', file)
+                    }}
+                    className={errors.dprFile ? 'border-red-500' : ''}
+                    disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                  />
+                )}
+                {formData.dprFileId ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.dprFile?.name || 'File uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.dprFile?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.dprFile.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.dprFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.dprFile!.id, existingFilesMetadata.dprFile!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('dprFile', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Delete file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : formData.dprFile ? (
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
                       <File className="h-4 w-4" />
@@ -2103,17 +2650,21 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.dprFile.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('dprFile', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                )}
+                ) : null}
                 {errors.dprFile && (
                   <p className="text-sm text-red-500">{errors.dprFile}</p>
                 )}
@@ -2124,16 +2675,63 @@ export default function CreateProject() {
 
               <div className="space-y-2">
                 <Label htmlFor="feasibilityStudyFile">Feasibility Study Report</Label>
-                <Input
-                  id="feasibilityStudyFile"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    handleFileChange('feasibilityStudyFile', file)
-                  }}
-                />
-                {formData.feasibilityStudyFile && (
+                {!formData.feasibilityStudyFileId && (
+                  <Input
+                    id="feasibilityStudyFile"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      handleFileChange('feasibilityStudyFile', file)
+                    }}
+                    disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                  />
+                )}
+                {formData.feasibilityStudyFileId ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.feasibilityStudyFile?.name || 'File uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.feasibilityStudyFile?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.feasibilityStudyFile.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.feasibilityStudyFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.feasibilityStudyFile!.id, existingFilesMetadata.feasibilityStudyFile!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('feasibilityStudyFile', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Remove file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : formData.feasibilityStudyFile ? (
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
                       <File className="h-4 w-4" />
@@ -2141,17 +2739,21 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.feasibilityStudyFile.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('feasibilityStudyFile', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                )}
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   Upload feasibility study if available (PDF, DOC, DOCX)
                 </p>
@@ -2159,16 +2761,63 @@ export default function CreateProject() {
 
               <div className="space-y-2">
                 <Label htmlFor="complianceCertificatesFile">Compliance Certificates</Label>
-                <Input
-                  id="complianceCertificatesFile"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    handleFileChange('complianceCertificatesFile', file)
-                  }}
-                />
-                {formData.complianceCertificatesFile && (
+                {!formData.complianceCertificatesFileId && (
+                  <Input
+                    id="complianceCertificatesFile"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      handleFileChange('complianceCertificatesFile', file)
+                    }}
+                    disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                  />
+                )}
+                {formData.complianceCertificatesFileId ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.complianceCertificatesFile?.name || 'File uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.complianceCertificatesFile?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.complianceCertificatesFile.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.complianceCertificatesFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.complianceCertificatesFile!.id, existingFilesMetadata.complianceCertificatesFile!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('complianceCertificatesFile', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Remove file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : formData.complianceCertificatesFile ? (
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
                       <File className="h-4 w-4" />
@@ -2176,17 +2825,21 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.complianceCertificatesFile.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('complianceCertificatesFile', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                )}
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   Statutory clearances, environment, safety certificates (PDF, DOC, DOCX)
                 </p>
@@ -2194,16 +2847,63 @@ export default function CreateProject() {
 
               <div className="space-y-2">
                 <Label htmlFor="budgetApprovalsFile">Budget Approvals</Label>
-                <Input
-                  id="budgetApprovalsFile"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    handleFileChange('budgetApprovalsFile', file)
-                  }}
-                />
-                {formData.budgetApprovalsFile && (
+                {!formData.budgetApprovalsFileId && (
+                  <Input
+                    id="budgetApprovalsFile"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      handleFileChange('budgetApprovalsFile', file)
+                    }}
+                    disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                  />
+                )}
+                {formData.budgetApprovalsFileId ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.budgetApprovalsFile?.name || 'File uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.budgetApprovalsFile?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.budgetApprovalsFile.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.budgetApprovalsFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.budgetApprovalsFile!.id, existingFilesMetadata.budgetApprovalsFile!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('budgetApprovalsFile', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Remove file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : formData.budgetApprovalsFile ? (
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
                       <File className="h-4 w-4" />
@@ -2211,17 +2911,21 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.budgetApprovalsFile.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('budgetApprovalsFile', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                )}
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   Municipal council / state approvals (PDF, DOC, DOCX)
                 </p>
@@ -2229,16 +2933,63 @@ export default function CreateProject() {
 
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="tenderRfpFile">Tender / RFP Documents</Label>
-                <Input
-                  id="tenderRfpFile"
-                  type="file"
-                  accept=".pdf,.doc,.docx"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    handleFileChange('tenderRfpFile', file)
-                  }}
-                />
-                {formData.tenderRfpFile && (
+                {!formData.tenderRfpFileId && (
+                  <Input
+                    id="tenderRfpFile"
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      handleFileChange('tenderRfpFile', file)
+                    }}
+                    disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                  />
+                )}
+                {formData.tenderRfpFileId ? (
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.tenderRfpFile?.name || 'File uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.tenderRfpFile?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.tenderRfpFile.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.tenderRfpFile && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.tenderRfpFile!.id, existingFilesMetadata.tenderRfpFile!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('tenderRfpFile', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Remove file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : formData.tenderRfpFile ? (
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
                       <File className="h-4 w-4" />
@@ -2246,17 +2997,21 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.tenderRfpFile.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('tenderRfpFile', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
-                )}
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   Upload tender or RFP documents if applicable (PDF, DOC, DOCX)
                 </p>
@@ -2302,17 +3057,66 @@ export default function CreateProject() {
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="projectImage">Project Image *</Label>
-              <Input
-                id="projectImage"
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0] || null
-                  handleFileChange('projectImage', file)
-                }}
-                className={errors.projectImage ? 'border-red-500' : ''}
-              />
-              {formData.projectImage && (
+              {!formData.projectImageId && (
+                <Input
+                  id="projectImage"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    handleFileChange('projectImage', file)
+                  }}
+                  className={errors.projectImage ? 'border-red-500' : ''}
+                  disabled={uploadFileMutation.isPending || deleteFileMutation.isPending}
+                />
+              )}
+              {formData.projectImageId ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2 bg-green-50 dark:bg-green-950/20 rounded-md border border-green-200">
+                    <div className="flex items-center space-x-2 flex-1 min-w-0">
+                      <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium truncate block">
+                          {existingFilesMetadata.projectImage?.name || 'Image uploaded successfully'}
+                        </span>
+                        {existingFilesMetadata.projectImage?.size && (
+                          <span className="text-xs text-muted-foreground">
+                            {formatFileSize(existingFilesMetadata.projectImage.size)}
+                          </span>
+                        )}
+                      </div>
+                      <Badge variant="secondary" className="text-xs flex-shrink-0">Ready to submit</Badge>
+                    </div>
+                    <div className="flex items-center space-x-1 ml-2">
+                      {existingFilesMetadata.projectImage && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownloadFile(existingFilesMetadata.projectImage!.id, existingFilesMetadata.projectImage!.name)}
+                          title="Download file"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleFileChange('projectImage', null)}
+                        disabled={deleteFileMutation.isPending}
+                        title="Remove file"
+                      >
+                        {deleteFileMutation.isPending ? (
+                          <Spinner size={16} />
+                        ) : (
+                          <X className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : formData.projectImage ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <div className="flex items-center space-x-2">
@@ -2321,12 +3125,16 @@ export default function CreateProject() {
                       <span className="text-xs text-muted-foreground">
                         ({formatFileSize(formData.projectImage.size)})
                       </span>
+                      {uploadFileMutation.isPending && (
+                        <Spinner size={16} className="ml-2" />
+                      )}
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       onClick={() => handleFileChange('projectImage', null)}
+                      disabled={uploadFileMutation.isPending}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -2341,7 +3149,7 @@ export default function CreateProject() {
                     </div>
                   )}
                 </div>
-              )}
+              ) : null}
               {errors.projectImage && (
                 <p className="text-sm text-red-500">{errors.projectImage}</p>
               )}
@@ -2362,16 +3170,96 @@ export default function CreateProject() {
                   // Reset input to allow selecting the same file again
                   e.target.value = ''
                 }}
+                disabled={uploadMultipleFilesMutation.isPending || deleteFileMutation.isPending}
               />
               <p className="text-xs text-muted-foreground">
                 You can upload multiple files (images and videos). Click "Choose File" again to add more.
               </p>
               
-              {/* File List */}
+              {/* Uploaded Files List */}
+              {existingOptionalMediaMetadata.length > 0 && (
+                <div className="space-y-2 mt-4">
+                  <div className="text-sm font-medium flex items-center space-x-2">
+                    <span>Uploaded Files ({existingOptionalMediaMetadata.length})</span>
+                    <Badge variant="secondary" className="text-xs">Ready to submit</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {existingOptionalMediaMetadata.map((fileMetadata, index) => {
+                      // Determine icon based on file type
+                      const FileIcon = fileMetadata.type.startsWith('image/') 
+                        ? ImageIcon 
+                        : fileMetadata.type.startsWith('video/') 
+                        ? Video 
+                        : File
+                      const isImage = fileMetadata.type.startsWith('image/')
+                      
+                      return (
+                        <div
+                          key={`uploaded-${fileMetadata.id}-${index}`}
+                          className="border rounded-lg p-3 bg-green-50 dark:bg-green-950/20 border-green-200 space-y-2"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start space-x-2 flex-1 min-w-0">
+                              <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0 text-green-600" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{fileMetadata.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(fileMetadata.size)} • {fileMetadata.type.split('/')[1]?.toUpperCase() || 'FILE'} • Uploaded successfully
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-1 ml-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadFile(fileMetadata.id, fileMetadata.name)}
+                                title="Download file"
+                                className="flex-shrink-0"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeOptionalMedia(index)}
+                                disabled={deleteFileMutation.isPending}
+                                className="flex-shrink-0"
+                                title="Remove file"
+                              >
+                                {deleteFileMutation.isPending ? (
+                                  <Spinner size={16} />
+                                ) : (
+                                  <X className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                          {/* Show preview for images */}
+                          {isImage && fileMetadata.id && (
+                            <div className="mt-2">
+                              <div className="w-full h-32 bg-muted rounded-md flex items-center justify-center">
+                                <FileIcon className="h-8 w-8 text-muted-foreground" />
+                                <span className="ml-2 text-xs text-muted-foreground">Image preview available after download</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              
+              {/* Files Being Uploaded List */}
               {formData.optionalMedia.length > 0 && (
                 <div className="space-y-2 mt-4">
-                  <div className="text-sm font-medium">
-                    Selected Files ({formData.optionalMedia.length})
+                  <div className="text-sm font-medium flex items-center space-x-2">
+                    <span>Uploading Files ({formData.optionalMedia.length})</span>
+                    {uploadMultipleFilesMutation.isPending && (
+                      <Spinner size={16} />
+                    )}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {formData.optionalMedia.map((file, index) => {
@@ -2398,7 +3286,13 @@ export default function CreateProject() {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              onClick={() => removeOptionalMedia(index)}
+                              onClick={() => {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  optionalMedia: prev.optionalMedia.filter((_, i) => i !== index)
+                                }))
+                              }}
+                              disabled={uploadMultipleFilesMutation.isPending}
                               className="flex-shrink-0"
                             >
                               <X className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import axios from "axios"
-import { tokenStorage } from "@/lib/session-storage"
+import { tokenStorage, userStorage } from "@/lib/session-storage"
 // Read env vars once at module load (Vite injects these at build time)
 const { VITE_PERDIX_JWT } = import.meta.env as { VITE_PERDIX_JWT?: string }
 
@@ -11,8 +11,8 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000, // Default timeout (10 seconds)
   headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    // 'Content-Type': 'application/json',
+    // 'Accept': 'application/json',
   },
 })
 
@@ -26,7 +26,7 @@ const perdixApi = axios.create({
   },
 })
 
-// Request interceptor: Automatically attach JWT token to all requests
+// Request interceptor: Automatically attach JWT token and user/organization IDs to all requests
 const requestInterceptor = (config: any) => {
   const token = tokenStorage.get()
   if (token) {
@@ -34,6 +34,23 @@ const requestInterceptor = (config: any) => {
     // Format: "Authorization: JWT <token>" as per your API requirement
     config.headers.Authorization = `JWT ${token}`
   }
+  
+  // Get user data from session storage (same pattern as Dashboard.tsx: user?.data?.login)
+  const user = userStorage.get()
+  if (user?.data) {
+    // Extract user_id from user.data.login (as used in Dashboard.tsx)
+    const userId = user.data.login
+    if (userId) {
+      config.headers['user_id'] = String(userId)
+    }
+    
+    // Extract organization_id from user.data.userBranches (common pattern) or user.data.organization_id
+    const organizationId = user.data.userBranches?.[1]?.branchId
+    if (organizationId) {
+      config.headers['organization_id'] = String(organizationId)
+    }
+  }
+  
   return config
 }
 
