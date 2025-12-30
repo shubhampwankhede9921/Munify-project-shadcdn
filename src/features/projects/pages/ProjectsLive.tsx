@@ -25,7 +25,8 @@ import {
   MessageCircle,
   X,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  FolderKanban
 } from "lucide-react"
 
 import { useAuth } from "@/contexts/auth-context"
@@ -57,8 +58,24 @@ export default function ProjectsLive() {
   const [showMoreFilters, setShowMoreFilters] = useState(false)
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false)
   
-  // Filter state using ProjectFiltersState
+  // Filter state for UI (temporary changes before applying)
   const [filters, setFilters] = useState<ProjectFiltersState>({
+    project_referenceid: "",
+    location: "",
+    project_category: "",
+    project_stage: "",
+    status: "",
+    credit_score: "",
+    funding_type: "",
+    mode_of_implementation: "",
+    ownership: "",
+    fund_requirement: [0, 1000],
+    commitment_gap: [0, 500],
+    project_cost: [0, 2000]
+  })
+
+  // Applied filters state (used for API calls)
+  const [appliedFilters, setAppliedFilters] = useState<ProjectFiltersState>({
     project_referenceid: "",
     location: "",
     project_category: "",
@@ -236,8 +253,8 @@ export default function ProjectsLive() {
     isError,
     error,
   } = useQuery<any, any>({
-    queryKey: [...LIVE_PROJECTS_QUERY_KEY, { filters }],
-    queryFn: () => apiService.get("/projects", buildProjectQueryParams(filters, valueRanges)),
+    queryKey: [...LIVE_PROJECTS_QUERY_KEY, { filters: appliedFilters }],
+    queryFn: () => apiService.get("/projects", buildProjectQueryParams(appliedFilters, valueRanges)),
   })
 
   const projects = useMemo<Project[]>(() => projectsResponse?.data ?? [], [projectsResponse])
@@ -265,7 +282,7 @@ export default function ProjectsLive() {
     }
   }, [projects])
 
-  // Count active filters for UI display (only range filters)
+  // Count active filters for UI display (only range filters) - based on applied filters
   const activeFiltersCount = useMemo(() => {
     let count = 0
     const fundReqMin = valueRanges?.fund_requirement?.min ?? 0
@@ -275,24 +292,24 @@ export default function ProjectsLive() {
     const projCostMin = valueRanges?.project_cost?.min ?? 0
     const projCostMax = valueRanges?.project_cost?.max ?? 2000
     
-    if (filters.fund_requirement[0] > fundReqMin || filters.fund_requirement[1] < fundReqMax) count++
-    if (filters.commitment_gap[0] > commitGapMin || filters.commitment_gap[1] < commitGapMax) count++
-    if (filters.project_cost[0] > projCostMin || filters.project_cost[1] < projCostMax) count++
+    if (appliedFilters.fund_requirement[0] > fundReqMin || appliedFilters.fund_requirement[1] < fundReqMax) count++
+    if (appliedFilters.commitment_gap[0] > commitGapMin || appliedFilters.commitment_gap[1] < commitGapMax) count++
+    if (appliedFilters.project_cost[0] > projCostMin || appliedFilters.project_cost[1] < projCostMax) count++
     return count
-  }, [filters, valueRanges])
+  }, [appliedFilters, valueRanges])
 
-  // Count all active filters (including basic ones)
+  // Count all active filters (including basic ones) - based on applied filters
   const totalActiveFiltersCount = useMemo(() => {
     let count = 0
-    if (filters.project_referenceid) count++
-    if (filters.location) count++
-    if (filters.project_category) count++
-    if (filters.project_stage) count++
-    if (filters.status) count++
-    if (filters.credit_score) count++
-    if (filters.funding_type) count++
-    if (filters.mode_of_implementation) count++
-    if (filters.ownership) count++
+    if (appliedFilters.project_referenceid) count++
+    if (appliedFilters.location) count++
+    if (appliedFilters.project_category) count++
+    if (appliedFilters.project_stage) count++
+    if (appliedFilters.status) count++
+    if (appliedFilters.credit_score) count++
+    if (appliedFilters.funding_type) count++
+    if (appliedFilters.mode_of_implementation) count++
+    if (appliedFilters.ownership) count++
     
     const fundReqMin = valueRanges?.fund_requirement?.min ?? 0
     const fundReqMax = valueRanges?.fund_requirement?.max ?? 1000
@@ -301,11 +318,11 @@ export default function ProjectsLive() {
     const projCostMin = valueRanges?.project_cost?.min ?? 0
     const projCostMax = valueRanges?.project_cost?.max ?? 2000
     
-    if (filters.fund_requirement[0] > fundReqMin || filters.fund_requirement[1] < fundReqMax) count++
-    if (filters.commitment_gap[0] > commitGapMin || filters.commitment_gap[1] < commitGapMax) count++
-    if (filters.project_cost[0] > projCostMin || filters.project_cost[1] < projCostMax) count++
+    if (appliedFilters.fund_requirement[0] > fundReqMin || appliedFilters.fund_requirement[1] < fundReqMax) count++
+    if (appliedFilters.commitment_gap[0] > commitGapMin || appliedFilters.commitment_gap[1] < commitGapMax) count++
+    if (appliedFilters.project_cost[0] > projCostMin || appliedFilters.project_cost[1] < projCostMax) count++
     return count
-  }, [filters, valueRanges])
+  }, [appliedFilters, valueRanges])
 
   const handleFiltersChange = (newFilters: ProjectFiltersState) => {
     setFilters(newFilters)
@@ -339,37 +356,38 @@ export default function ProjectsLive() {
       project_cost: [valueRanges?.project_cost?.min ?? 0, valueRanges?.project_cost?.max ?? 2000] as [number, number],
     }
     setFilters(clearedFilters)
+    setAppliedFilters(clearedFilters)
+  }
+
+  const handleApplyFilters = () => {
+    setAppliedFilters(filters)
+    setAdvancedFiltersOpen(false)
   }
 
   // Update filter ranges when valueRanges are loaded
   useEffect(() => {
     if (valueRanges && (valueRanges.fund_requirement.max > 0 || valueRanges.commitment_gap.max > 0 || valueRanges.project_cost.max > 0)) {
+      const updatedFilters = {
+        fund_requirement: [
+          valueRanges.fund_requirement.min,
+          valueRanges.fund_requirement.max
+        ] as [number, number],
+        commitment_gap: [
+          valueRanges.commitment_gap.min,
+          valueRanges.commitment_gap.max
+        ] as [number, number],
+        project_cost: [
+          valueRanges.project_cost.min,
+          valueRanges.project_cost.max
+        ] as [number, number],
+      }
       setFilters(prev => ({
         ...prev,
-        fund_requirement: [
-          prev.fund_requirement[0] === 0 && prev.fund_requirement[1] === 1000 
-            ? valueRanges.fund_requirement.min 
-            : prev.fund_requirement[0],
-          prev.fund_requirement[0] === 0 && prev.fund_requirement[1] === 1000 
-            ? valueRanges.fund_requirement.max 
-            : prev.fund_requirement[1]
-        ],
-        commitment_gap: [
-          prev.commitment_gap[0] === 0 && prev.commitment_gap[1] === 500 
-            ? valueRanges.commitment_gap.min 
-            : prev.commitment_gap[0],
-          prev.commitment_gap[0] === 0 && prev.commitment_gap[1] === 500 
-            ? valueRanges.commitment_gap.max 
-            : prev.commitment_gap[1]
-        ],
-        project_cost: [
-          prev.project_cost[0] === 0 && prev.project_cost[1] === 2000 
-            ? valueRanges.project_cost.min 
-            : prev.project_cost[0],
-          prev.project_cost[0] === 0 && prev.project_cost[1] === 2000 
-            ? valueRanges.project_cost.max 
-            : prev.project_cost[1]
-        ]
+        ...updatedFilters
+      }))
+      setAppliedFilters(prev => ({
+        ...prev,
+        ...updatedFilters
       }))
     }
   }, [valueRanges])
@@ -530,7 +548,7 @@ export default function ProjectsLive() {
                     Clear All
                   </Button>
                   <Button 
-                    onClick={() => setAdvancedFiltersOpen(false)}
+                    onClick={handleApplyFilters}
                     className="flex-1"
                   >
                     Apply Filters
@@ -544,7 +562,11 @@ export default function ProjectsLive() {
               </div>
             </SheetContent>
           </Sheet>
-          <Button>
+          <Button variant="outline" onClick={() => navigate("/main/projects/my")}>
+            <FolderKanban className="h-4 w-4 mr-2" />
+            My Projects
+          </Button>
+          <Button onClick={() => navigate("/main/projects/favorites")}>
             <Star className="h-4 w-4 mr-2" />
             My Favorites
           </Button>
@@ -567,6 +589,8 @@ export default function ProjectsLive() {
                     onChange={(e) => {
                       const newSearch = e.target.value
                       setFilters(prev => ({ ...prev, project_referenceid: newSearch }))
+                      // Update applied filters immediately for search (no need to wait for Apply button)
+                      setAppliedFilters(prev => ({ ...prev, project_referenceid: newSearch }))
                       debouncedSearch(newSearch)
                     }}
                   />
@@ -577,6 +601,7 @@ export default function ProjectsLive() {
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
                       onClick={() => {
                         setFilters(prev => ({ ...prev, project_referenceid: "" }))
+                      setAppliedFilters(prev => ({ ...prev, project_referenceid: "" }))
                       }}
                     >
                       <X className="h-3 w-3" />
@@ -609,36 +634,16 @@ export default function ProjectsLive() {
                 <span>Filters:</span>
               </div>
               
-              {/* Primary Filters Row - First line with Show More button */}
+              {/* Primary Filters Row - First line with 5 filters + Show More button */}
               <div className="flex items-center gap-3 flex-wrap">
-                {/* Show More Button - Always visible in first line when there are additional filters */}
-                {(filterOptions.fundingTypes.length > 0 || filterOptions.modes.length > 0 || filterOptions.ownerships.length > 0) && (
-                  <Button
-                    variant="ghost"
-                    onClick={() => setShowMoreFilters(!showMoreFilters)}
-                    className="h-9 px-3 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 order-last border border-transparent hover:border-border transition-all"
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {showMoreFilters ? (
-                        <>
-                          <ChevronUp className="h-3.5 w-3.5" />
-                          <span>Show Less</span>
-                        </>
-                      ) : (
-                        <>
-                          <ChevronDown className="h-3.5 w-3.5" />
-                          <span>Show More</span>
-                        </>
-                      )}
-                    </span>
-                  </Button>
-                )}
                 {/* Location (State) */}
                 {filterOptions.states.length > 0 && (
                   <Select 
-                    value={filters.location || "all"} 
+                    value={appliedFilters.location || "all"} 
                     onValueChange={(value) => {
-                      setFilters(prev => ({ ...prev, location: value === "all" ? "" : value }))
+                      const newValue = value === "all" ? "" : value
+                      setFilters(prev => ({ ...prev, location: newValue }))
+                      setAppliedFilters(prev => ({ ...prev, location: newValue }))
                     }}
                   >
                     <SelectTrigger className="w-[180px] h-9">
@@ -658,9 +663,11 @@ export default function ProjectsLive() {
                 {/* Project Category */}
                 {filterOptions.categories.length > 0 && (
                   <Select 
-                    value={filters.project_category || "all"} 
+                    value={appliedFilters.project_category || "all"} 
                     onValueChange={(value) => {
-                      setFilters(prev => ({ ...prev, project_category: value === "all" ? "" : value }))
+                      const newValue = value === "all" ? "" : value
+                      setFilters(prev => ({ ...prev, project_category: newValue }))
+                      setAppliedFilters(prev => ({ ...prev, project_category: newValue }))
                     }}
                   >
                     <SelectTrigger className="w-[180px] h-9">
@@ -677,34 +684,14 @@ export default function ProjectsLive() {
                   </Select>
                 )}
 
-                {/* Status */}
-                {filterOptions.statuses.length > 0 && (
-                  <Select 
-                    value={filters.status || "all"} 
-                    onValueChange={(value) => {
-                      setFilters(prev => ({ ...prev, status: value === "all" ? "" : value }))
-                    }}
-                  >
-                    <SelectTrigger className="w-[150px] h-9">
-                      <SelectValue placeholder="All Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      {filterOptions.statuses.map((status) => (
-                        <SelectItem key={status.value} value={status.value}>
-                          {status.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-
                 {/* Project Stage */}
                 {filterOptions.stages.length > 0 && (
                   <Select 
-                    value={filters.project_stage || "all"} 
+                    value={appliedFilters.project_stage || "all"} 
                     onValueChange={(value) => {
-                      setFilters(prev => ({ ...prev, project_stage: value === "all" ? "" : value }))
+                      const newValue = value === "all" ? "" : value
+                      setFilters(prev => ({ ...prev, project_stage: newValue }))
+                      setAppliedFilters(prev => ({ ...prev, project_stage: newValue }))
                     }}
                   >
                     <SelectTrigger className="w-[180px] h-9">
@@ -724,9 +711,11 @@ export default function ProjectsLive() {
                 {/* Credit Score */}
                 {filterOptions.creditScores.length > 0 && (
                   <Select 
-                    value={filters.credit_score || "all"} 
+                    value={appliedFilters.credit_score || "all"} 
                     onValueChange={(value) => {
-                      setFilters(prev => ({ ...prev, credit_score: value === "all" ? "" : value }))
+                      const newValue = value === "all" ? "" : value
+                      setFilters(prev => ({ ...prev, credit_score: newValue }))
+                      setAppliedFilters(prev => ({ ...prev, credit_score: newValue }))
                     }}
                   >
                     <SelectTrigger className="w-[180px] h-9">
@@ -743,39 +732,66 @@ export default function ProjectsLive() {
                   </Select>
                 )}
 
+                {/* Funding Type */}
+                {filterOptions.fundingTypes.length > 0 && (
+                  <Select 
+                    value={appliedFilters.funding_type || "all"} 
+                    onValueChange={(value) => {
+                      const newValue = value === "all" ? "" : value
+                      setFilters(prev => ({ ...prev, funding_type: newValue }))
+                      setAppliedFilters(prev => ({ ...prev, funding_type: newValue }))
+                    }}
+                  >
+                    <SelectTrigger className="w-[180px] h-9">
+                      <SelectValue placeholder="All Funding Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Funding Types</SelectItem>
+                      {filterOptions.fundingTypes.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
+                {/* Show More Button - Show when there are additional filters */}
+                {(filterOptions.modes.length > 0 || filterOptions.ownerships.length > 0) && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowMoreFilters(!showMoreFilters)}
+                    className="h-9 px-3 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 shrink-0 border border-transparent hover:border-border transition-all"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {showMoreFilters ? (
+                        <>
+                          <ChevronUp className="h-3.5 w-3.5" />
+                          <span>Show Less</span>
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3.5 w-3.5" />
+                          <span>Show More</span>
+                        </>
+                      )}
+                    </span>
+                  </Button>
+                )}
               </div>
 
               {/* Secondary Filters Row (shown when showMoreFilters is true) */}
               {showMoreFilters && (
                 <div className="flex flex-wrap items-center gap-3 pt-2 border-t">
-                  {/* Funding Type */}
-                  {filterOptions.fundingTypes.length > 0 && (
-                    <Select 
-                      value={filters.funding_type || "all"} 
-                      onValueChange={(value) => {
-                        setFilters(prev => ({ ...prev, funding_type: value === "all" ? "" : value }))
-                      }}
-                    >
-                      <SelectTrigger className="w-[180px] h-9">
-                        <SelectValue placeholder="All Funding Types" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Funding Types</SelectItem>
-                        {filterOptions.fundingTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
 
                   {/* Mode of Implementation */}
                   {filterOptions.modes.length > 0 && (
                     <Select 
-                      value={filters.mode_of_implementation || "all"} 
+                      value={appliedFilters.mode_of_implementation || "all"} 
                       onValueChange={(value) => {
-                        setFilters(prev => ({ ...prev, mode_of_implementation: value === "all" ? "" : value }))
+                        const newValue = value === "all" ? "" : value
+                        setFilters(prev => ({ ...prev, mode_of_implementation: newValue }))
+                        setAppliedFilters(prev => ({ ...prev, mode_of_implementation: newValue }))
                       }}
                     >
                       <SelectTrigger className="w-[200px] h-9">
@@ -795,9 +811,11 @@ export default function ProjectsLive() {
                   {/* Ownership */}
                   {filterOptions.ownerships.length > 0 && (
                     <Select 
-                      value={filters.ownership || "all"} 
+                      value={appliedFilters.ownership || "all"} 
                       onValueChange={(value) => {
-                        setFilters(prev => ({ ...prev, ownership: value === "all" ? "" : value }))
+                        const newValue = value === "all" ? "" : value
+                        setFilters(prev => ({ ...prev, ownership: newValue }))
+                        setAppliedFilters(prev => ({ ...prev, ownership: newValue }))
                       }}
                     >
                       <SelectTrigger className="w-[180px] h-9">
@@ -817,48 +835,43 @@ export default function ProjectsLive() {
               )}
 
               {/* Active Filter Indicators */}
-              {(filters.location || filters.project_category || filters.status || 
-                filters.project_stage || filters.credit_score || filters.funding_type || 
-                filters.mode_of_implementation || filters.ownership) && (
+              {(appliedFilters.location || appliedFilters.project_category || 
+                appliedFilters.project_stage || appliedFilters.credit_score || appliedFilters.funding_type || 
+                appliedFilters.mode_of_implementation || appliedFilters.ownership) && (
                 <div className="flex items-center gap-1 flex-wrap">
-                  {filters.location && (
+                  {appliedFilters.location && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.states.find(s => s.value === filters.location)?.label || filters.location}
+                      {filterOptions.states.find(s => s.value === appliedFilters.location)?.label || appliedFilters.location}
                     </Badge>
                   )}
-                  {filters.project_category && (
+                  {appliedFilters.project_category && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.categories.find(c => c.value === filters.project_category)?.label || filters.project_category}
+                      {filterOptions.categories.find(c => c.value === appliedFilters.project_category)?.label || appliedFilters.project_category}
                     </Badge>
                   )}
-                  {filters.status && (
+                  {appliedFilters.project_stage && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.statuses.find(s => s.value === filters.status)?.label || filters.status}
+                      {filterOptions.stages.find(s => s.value === appliedFilters.project_stage)?.label || appliedFilters.project_stage}
                     </Badge>
                   )}
-                  {filters.project_stage && (
+                  {appliedFilters.credit_score && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.stages.find(s => s.value === filters.project_stage)?.label || filters.project_stage}
+                      Credit: {filterOptions.creditScores.find(c => c.value === appliedFilters.credit_score)?.label || appliedFilters.credit_score}
                     </Badge>
                   )}
-                  {filters.credit_score && (
+                  {appliedFilters.funding_type && (
                     <Badge variant="secondary" className="text-xs">
-                      Credit: {filterOptions.creditScores.find(c => c.value === filters.credit_score)?.label || filters.credit_score}
+                      {filterOptions.fundingTypes.find(f => f.value === appliedFilters.funding_type)?.label || appliedFilters.funding_type}
                     </Badge>
                   )}
-                  {filters.funding_type && (
+                  {appliedFilters.mode_of_implementation && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.fundingTypes.find(f => f.value === filters.funding_type)?.label || filters.funding_type}
+                      {filterOptions.modes.find(m => m.value === appliedFilters.mode_of_implementation)?.label || appliedFilters.mode_of_implementation}
                     </Badge>
                   )}
-                  {filters.mode_of_implementation && (
+                  {appliedFilters.ownership && (
                     <Badge variant="secondary" className="text-xs">
-                      {filterOptions.modes.find(m => m.value === filters.mode_of_implementation)?.label || filters.mode_of_implementation}
-                    </Badge>
-                  )}
-                  {filters.ownership && (
-                    <Badge variant="secondary" className="text-xs">
-                      {filterOptions.ownerships.find(o => o.value === filters.ownership)?.label || filters.ownership}
+                      {filterOptions.ownerships.find(o => o.value === appliedFilters.ownership)?.label || appliedFilters.ownership}
                     </Badge>
                   )}
                 </div>
