@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useNavigate, useParams, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,10 +13,6 @@ import {
   CheckCircle2, 
   X, 
   Clock, 
-  
-  
-  
-  
   AlertTriangle, 
   CheckCircle,
   Loader2,
@@ -25,51 +21,15 @@ import {
   Calendar,
   DollarSign,
   FileText,
+  Download,
+  Image as ImageIcon,
+  Video,
+  File,
 } from "lucide-react"
-import apiService from '@/services/api'
+import apiService, { api } from '@/services/api'
 import { alerts } from '@/lib/alerts'
 import { useAuth } from "@/contexts/auth-context"
 
-interface Project {
-  id: number
-  title: string
-  project_reference_id?: string
-  organization_id: string
-  category: string
-  project_stage: string
-  status: string
-  description?: string
-  state?: string
-  city?: string
-  ward?: string
-  funding_requirement?: number
-  total_project_cost?: number
-  already_secured_funds?: number
-  // Credit & overview
-  municipality_credit_rating?: string
-  municipality_credit_score?: number
-  funding_type?: string
-  commitment_allocation_days?: number
-  minimum_commitment_fulfilment_percentage?: number
-  mode_of_implementation?: string
-  ownership?: string
-  // Financial terms
-  tenure?: number
-  cut_off_rate_percentage?: number
-  minimum_commitment_amount?: number
-  conditions?: string
-  start_date?: string
-  end_date?: string
-  fundraising_start_date?: string
-  fundraising_end_date?: string
-  contact_person?: string
-  contact_person_designation?: string
-  contact_person_email?: string
-  contact_person_phone?: string
-  department?: string
-  created_at: string
-  updated_at: string
-}
 
 export default function AdminProjectReview() {
   const navigate = useNavigate()
@@ -79,15 +39,18 @@ export default function AdminProjectReview() {
   const [showApproveConfirm, setShowApproveConfirm] = useState(false)
   const [showRejectConfirm, setShowRejectConfirm] = useState(false)
 const { user } = useAuth()
-  // Fetch project details
-  const { data: project, isLoading, error, isError } = useQuery({
+  // Fetch project details with documents
+  const { data: projectResponse, isLoading, error, isError } = useQuery<any>({
     queryKey: ['project', id],
     queryFn: async () => {
-      const response = await apiService.get(`/projects/${id}`)
-      return (response?.data || response) as Project
+      return await apiService.get<any>(`/projects/${id}`, {
+        include_documents: true
+      })
     },
     enabled: !!id,
   })
+
+  const project = projectResponse?.data || projectResponse
 
   // Mutation for approving project
   const approveProjectMutation = useMutation({
@@ -149,6 +112,73 @@ const { user } = useAuth()
       maximumFractionDigits: 0,
     }).format(amount)
   }
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  // Get document type display name
+  const getDocumentTypeName = (documentType: string): string => {
+    const typeMap: Record<string, string> = {
+      'dpr': 'DPR (Detailed Project Report)',
+      'feasibility_study': 'Feasibility Study',
+      'compliance_certificate': 'Compliance Certificate',
+      'budget_approval': 'Budget Approval',
+      'tender_rfp': 'Tender / RFP',
+      'project_image': 'Project Image',
+      'optional_media': 'Media',
+    }
+    return typeMap[documentType] || documentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  // Filter documents by type
+  const documents = useMemo(() => {
+    if (!project?.documents) return []
+    return project.documents.filter((doc: any) => 
+      ['dpr', 'feasibility_study', 'compliance_certificate', 'budget_approval', 'tender_rfp'].includes(doc.document_type)
+    )
+  }, [project?.documents])
+
+  // Get project image
+  const projectImage = useMemo(() => {
+    if (!project?.documents) return null
+    return project.documents.find((doc: any) => doc.document_type === 'project_image') || null
+  }, [project?.documents])
+
+  // Filter optional media files
+  const optionalMedia = useMemo(() => {
+    if (!project?.documents) return []
+    return project.documents.filter((doc: any) => doc.document_type === 'optional_media')
+  }, [project?.documents])
 
   const getStatusBadge = (status: string) => {
     const statusLower = status?.toLowerCase() || ''
@@ -394,7 +424,7 @@ const { user } = useAuth()
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <Label className="text-muted-foreground">Total Project Cost</Label>
                   <p className="font-semibold text-lg mt-1">{formatCurrency(project.total_project_cost)}</p>
@@ -406,6 +436,10 @@ const { user } = useAuth()
                 <div>
                   <Label className="text-muted-foreground">Already Secured</Label>
                   <p className="font-semibold text-lg mt-1">{formatCurrency(project.already_secured_funds)}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Commitment Gap</Label>
+                  <p className="font-semibold text-lg mt-1 text-orange-600">{formatCurrency(project.commitment_gap)}</p>
                 </div>
               </div>
               {/* Term sheet details */}
@@ -523,6 +557,156 @@ const { user } = useAuth()
               </CardContent>
             </Card>
           )}
+
+          {/* Project Documents */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Project Documents
+              </CardTitle>
+              <CardDescription>
+                Review all project documents and media files
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Documents Section */}
+              {documents.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-base font-semibold">Documents</Label>
+                    <Badge variant="secondary">{documents.length} file(s)</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    {documents.map((doc: any) => (
+                      <div
+                        key={doc.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex-shrink-0">
+                            <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate">{doc.file.original_filename || doc.file.filename}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {getDocumentTypeName(doc.document_type)} • {formatFileSize(doc.file.file_size)} • {formatDate(doc.created_at)}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-4 flex-shrink-0"
+                          onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Download
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Project Image Section */}
+              {projectImage && (
+                <>
+                  {documents.length > 0 && <Separator />}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Project Image</Label>
+                    </div>
+                    <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg flex-shrink-0">
+                          <ImageIcon className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium truncate">{projectImage.file.original_filename || projectImage.file.filename}</div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatFileSize(projectImage.file.file_size)} • {formatDate(projectImage.created_at)}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="ml-4 flex-shrink-0"
+                        onClick={() => handleDownloadFile(projectImage.file.id, projectImage.file.original_filename || projectImage.file.filename)}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Optional Media Section */}
+              {optionalMedia.length > 0 && (
+                <>
+                  {(documents.length > 0 || projectImage) && <Separator />}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Optional Media</Label>
+                      <Badge variant="secondary">{optionalMedia.length} file(s)</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {optionalMedia.map((doc: any) => {
+                        const isImage = doc.file.mime_type.startsWith('image/')
+                        const isVideo = doc.file.mime_type.startsWith('video/')
+                        const FileIcon = isImage ? ImageIcon : isVideo ? Video : File
+                        
+                        return (
+                          <div
+                            key={doc.id}
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-center space-x-3 flex-1 min-w-0">
+                              <div className={`p-2 rounded-lg flex-shrink-0 ${
+                                isImage ? 'bg-green-100 dark:bg-green-900/30' :
+                                isVideo ? 'bg-red-100 dark:bg-red-900/30' :
+                                'bg-purple-100 dark:bg-purple-900/30'
+                              }`}>
+                                <FileIcon className={`h-5 w-5 ${
+                                  isImage ? 'text-green-600 dark:text-green-400' :
+                                  isVideo ? 'text-red-600 dark:text-red-400' :
+                                  'text-purple-600 dark:text-purple-400'
+                                }`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-medium truncate">{doc.file.original_filename || doc.file.filename}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {formatFileSize(doc.file.file_size)} • {doc.file.mime_type.split('/')[1]?.toUpperCase() || 'FILE'} • {formatDate(doc.created_at)}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="ml-4 flex-shrink-0"
+                              onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Empty State */}
+              {documents.length === 0 && !projectImage && optionalMedia.length === 0 && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  No documents or media files available for this project.
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Action Panel */}

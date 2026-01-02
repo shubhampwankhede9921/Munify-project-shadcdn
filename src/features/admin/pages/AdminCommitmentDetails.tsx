@@ -19,9 +19,11 @@ import {
   Award,
   MoreHorizontal,
   ArrowUpDown,
+  File,
+  Download,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import apiService from "@/services/api"
+import apiService, { api } from "@/services/api"
 import { alerts } from "@/lib/alerts"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -50,6 +52,7 @@ export default function AdminCommitmentDetails() {
     queryFn: async () =>
       apiService.get("/commitments/commitment-details/by-project", {
         project_reference_id: projectReferenceId,
+        include_documents: true,
         skip,
       }),
     enabled: !!projectReferenceId,
@@ -148,6 +151,67 @@ export default function AdminCommitmentDetails() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  // Handle file view (open in new tab)
+  const handleViewFile = async (fileId: number, mimeType: string) => {
+    try {
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: mimeType }))
+      window.open(url, '_blank')
+      // Clean up URL after a delay to allow the browser to load it
+      setTimeout(() => window.URL.revokeObjectURL(url), 100)
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to view file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error viewing file:', err)
+    }
+  }
+
+  // Get document type display name
+  const getDocumentTypeName = (documentType: string): string => {
+    const typeMap: Record<string, string> = {
+      'sanction_letter': 'Sanction Letter',
+      'term_sheet': 'Term Sheet',
+      'commitment_letter': 'Commitment Letter',
+      'other': 'Other Document',
+    }
+    return typeMap[documentType] || documentType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   const getStatusBadge = (status: string) => {
@@ -614,6 +678,62 @@ export default function AdminCommitmentDetails() {
                 <div>
                   <Label className="text-xs text-muted-foreground">Terms & Conditions</Label>
                   <p className="mt-1 text-sm whitespace-pre-wrap">{selectedCommitment.terms_conditions_text}</p>
+                </div>
+              )}
+              {selectedCommitment.documents && selectedCommitment.documents.length > 0 && (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Documents</Label>
+                  <div className="space-y-2">
+                    {selectedCommitment.documents.map((doc: any) => (
+                      <Card key={doc.id} className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <File className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{doc.file?.original_filename || doc.file?.filename || 'Document'}</p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+                                <span>{getDocumentTypeName(doc.document_type)}</span>
+                                {doc.file?.file_size && (
+                                  <>
+                                    <span>•</span>
+                                    <span>{formatFileSize(doc.file.file_size)}</span>
+                                  </>
+                                )}
+                                {doc.is_required && (
+                                  <>
+                                    <span>•</span>
+                                    <Badge variant="outline" className="text-xs">Required</Badge>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {doc.file && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewFile(doc.file.id, doc.file.mime_type)}
+                                  title="View document"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                                  title="Download document"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

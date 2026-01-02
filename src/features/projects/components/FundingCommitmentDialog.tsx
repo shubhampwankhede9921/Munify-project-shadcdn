@@ -8,9 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Spinner } from "@/components/ui/spinner"
-import { IndianRupee } from "lucide-react"
+import { IndianRupee, Download, X, FileText, CheckCircle2 } from "lucide-react"
 import { alerts } from "@/lib/alerts"
-import { apiService } from "@/services/api"
+import apiService, { api } from "@/services/api"
 import { type Project, LIVE_PROJECTS_QUERY_KEY } from "@/features/projects/types"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -74,9 +74,30 @@ export function FundingCommitmentDialog({
   const [tenure, setTenure] = useState("")
   const [fundingMode, setFundingMode] = useState("")
   const [terms, setTerms] = useState("")
-  const [supportingDocument, setSupportingDocument] = useState<File | null>(null)
+  const [supportingDocuments, setSupportingDocuments] = useState<File[]>([])
   const [commitmentId, setCommitmentId] = useState<number | null>(null)
   const [amountError, setAmountError] = useState("")
+  const [documentError, setDocumentError] = useState("")
+  
+  // State for existing commitment documents
+  interface CommitmentDocument {
+    id: number
+    commitment_id: number
+    file_id: number
+    document_type: string
+    is_required: boolean
+    uploaded_by: string
+    file: {
+      id: number
+      filename: string
+      original_filename: string
+      mime_type: string
+      file_size: number
+      [key: string]: any
+    }
+  }
+  const [existingDocuments, setExistingDocuments] = useState<CommitmentDocument[]>([])
+  const [deletingFileId, setDeletingFileId] = useState<number | null>(null)
 
   // TODO: replace with real authenticated user from auth context
   const { user } = useAuth()
@@ -121,6 +142,55 @@ export function FundingCommitmentDialog({
   const commitmentStatus = currentCommitment?.status
   const isCommitmentUnderReview =
     !commitmentId || commitmentStatus?.toLowerCase() === "under_review"
+
+  // Fetch commitment documents if commitmentId exists
+  const {
+    data: commitmentDocumentsResponse,
+  } = useQuery<any, any>({
+    queryKey: ["commitment-documents", commitmentId],
+    queryFn: async () => {
+      if (!commitmentId) return null
+      // GET /api/v1/commitments/{commitment_id}?include_documents=true
+      const response = await apiService.get(`/commitments/${commitmentId}`, {
+        include_documents: true
+      })
+      // Response structure: { status: "success", message: "...", data: { commitment_id: 123, documents: [...] } }
+      return response
+    },
+    enabled: open && !!commitmentId,
+  })
+
+  // Update existing documents when fetched
+  useEffect(() => {
+    if (!commitmentDocumentsResponse) {
+      setExistingDocuments([])
+      return
+    }
+    
+    // Response structure: { status: "success", message: "...", data: { commitment_id: 123, documents: [...] } }
+    let docs: CommitmentDocument[] = []
+    
+    // Check data.documents first (expected structure)
+    if (commitmentDocumentsResponse?.data?.documents && Array.isArray(commitmentDocumentsResponse.data.documents)) {
+      docs = commitmentDocumentsResponse.data.documents
+    } 
+    // Fallback to direct documents property
+    else if (commitmentDocumentsResponse?.documents && Array.isArray(commitmentDocumentsResponse.documents)) {
+      docs = commitmentDocumentsResponse.documents
+    }
+    
+    setExistingDocuments(docs)
+    
+    // Debug logging
+    if (commitmentId) {
+      console.log('Commitment documents fetched:', {
+        commitmentId,
+        response: commitmentDocumentsResponse,
+        documentsCount: docs.length,
+        documents: docs
+      })
+    }
+  }, [commitmentDocumentsResponse, commitmentId])
 
   // When project (with optional commitment) is loaded, prefill form if commitment exists
   useEffect(() => {
@@ -188,9 +258,141 @@ export function FundingCommitmentDialog({
     setTenure("")
     setFundingMode("")
     setTerms("")
-    setSupportingDocument(null)
+    setSupportingDocuments([])
     setCommitmentId(null)
     setAmountError("")
+    setDocumentError("")
+    setExistingDocuments([])
+    setDeletingFileId(null)
+  }
+
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
+  }
+
+  // Handle file download
+  const handleDownloadFile = async (fileId: number, filename: string) => {
+    try {
+      const response = await api.get(`/files/${fileId}/download`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      alerts.success('Success', 'File downloaded successfully')
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to download file. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  // Handle file delete
+  const handleDeleteDocument = async (fileId: number) => {
+    if (!commitmentId) return
+    
+    // Prevent double delete calls
+    if (deletingFileId === fileId) {
+      return
+    }
+    
+    try {
+      setDeletingFileId(fileId)
+      
+      // Use query params in URL - DELETE /api/v1/commitments/files/{file_id}?commitment_id=123
+      await apiService.delete(`/commitments/files/${fileId}?commitment_id=${commitmentId}`)
+      
+      // Remove from local state
+      setExistingDocuments(prev => {
+        const updated = prev.filter(doc => doc.file_id !== fileId)
+        // If no documents remain, set error
+        if (updated.length === 0) {
+          setDocumentError("Supporting document is required")
+        }
+        return updated
+      })
+      
+      alerts.success('Success', 'Document deleted successfully')
+      
+      // Refresh documents
+      queryClient.invalidateQueries({ queryKey: ["commitment-documents", commitmentId] })
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Failed to delete document. Please try again.'
+      alerts.error('Error', errorMessage)
+      console.error('Error deleting document:', err)
+    } finally {
+      setDeletingFileId(null)
+    }
+  }
+
+  // Handle file upload for existing commitment
+  const uploadDocumentMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!commitmentId) {
+        throw new Error("Commitment ID is required")
+      }
+      
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('document_type', 'sanction_letter')
+      
+      // organization_id is optional, can be fetched from commitment
+      if (user?.data?.userBranches?.[1]?.branchId) {
+        formData.append('organization_id', String(user.data.userBranches[1].branchId))
+      }
+      
+      return apiService.post(`/commitments/${commitmentId}/files/upload`, formData)
+    },
+    onSuccess: () => {
+      alerts.success('Success', 'Document uploaded successfully')
+      // Clear error when document is uploaded
+      if (documentError) {
+        setDocumentError("")
+      }
+      // Refresh documents
+      queryClient.invalidateQueries({ queryKey: ["commitment-documents", commitmentId] })
+    },
+    onError: (error: any) => {
+      const errorMessage = error?.response?.data?.message || error?.message || 'Failed to upload document. Please try again.'
+      alerts.error('Error', errorMessage)
+    },
+  })
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    
+    if (!commitmentId) {
+      alerts.error('Error', 'Commitment ID is required')
+      return
+    }
+    
+    // Clear error when files are selected
+    if (documentError) {
+      setDocumentError("")
+    }
+    
+    const fileArray = Array.from(files)
+    for (const file of fileArray) {
+      await uploadDocumentMutation.mutateAsync(file)
+    }
+    
+    // Clear the input
+    const input = document.getElementById('supportingDocumentsEdit') as HTMLInputElement
+    if (input) {
+      input.value = ''
+    }
   }
 
   // Validate amount against minimum commitment amount
@@ -242,6 +444,22 @@ export function FundingCommitmentDialog({
         )
       }
 
+      // Validate documents are uploaded
+      const hasExistingCommitment = Boolean(commitmentId)
+      if (hasExistingCommitment) {
+        // For existing commitment, check if documents exist
+        if (existingDocuments.length === 0) {
+          setDocumentError("Supporting document is required")
+          throw new Error("Supporting document is required")
+        }
+      } else {
+        // For new commitment, check if files are selected
+        if (supportingDocuments.length === 0) {
+          setDocumentError("Supporting document is required")
+          throw new Error("Supporting document is required")
+        }
+      }
+
       const parsedAmount = parseFloat(amount)
       if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
         throw new Error("Please enter a valid commitment amount")
@@ -268,13 +486,11 @@ export function FundingCommitmentDialog({
 
       const normalizedFundingMode = fundingMode.toLowerCase() as "loan" | "grant" | "csr"
 
-      const hasExistingCommitment = Boolean(commitmentId)
-
       if (hasExistingCommitment && commitmentId) {
         if (!isCommitmentUnderReview) {
           throw new Error("You can update your commitment only while it is UNDER_REVIEW.")
         }
-        // Update existing commitment
+        // Update existing commitment (without documents for now, as update endpoint may not support documents)
         const updatePayload = {
           amount: parsedAmount,
           interest_rate: rate,
@@ -286,29 +502,43 @@ export function FundingCommitmentDialog({
         return apiService.put(`/commitments/${commitmentId}`, updatePayload)
       }
 
-      // Create new commitment
-      const createPayload = {
-        project_reference_id: project.project_reference_id,
-        organization_type: user?.data?.org_type,
-        organization_id: String(user.data.userBranches?.[1]?.branchId),
-        committed_by: currentUserId,
-        amount: parsedAmount,
-        currency: "INR",
-        funding_mode: normalizedFundingMode,
-        interest_rate: rate,
-        tenure_months: tenureValue,
-        terms_conditions_text: terms?.trim() || "",
-        created_by: currentUserId,
+      // Create new commitment with documents using FormData
+      const formData = new FormData()
+      
+      // Commitment fields
+      formData.append('project_reference_id', project.project_reference_id)
+      formData.append('organization_type', user?.data?.org_type || '')
+      formData.append('organization_id', String(user?.data?.userBranches?.[1]?.branchId || ''))
+      formData.append('committed_by', currentUserId || '')
+      formData.append('amount', parsedAmount.toString())
+      formData.append('currency', 'INR')
+      formData.append('funding_mode', normalizedFundingMode)
+      formData.append('interest_rate', rate.toString())
+      formData.append('tenure_months', tenureValue.toString())
+      formData.append('terms_conditions_text', terms?.trim() || '')
+      formData.append('access_level', 'private')
+      formData.append('is_required', 'true')
+      
+      // Document fields (if files are provided)
+      if (supportingDocuments.length > 0) {
+        supportingDocuments.forEach((file) => {
+          formData.append('files', file)
+          formData.append('document_types', 'sanction_letter')
+        })
       }
 
-      return apiService.post("/commitments", createPayload)
+      return apiService.post("/commitments/with-documents", formData)
     },
     onSuccess: (_data, _variables, _context) => {
       alerts.success("Funding Committed", "Successfully saved your commitment for this project")
+      const newCommitmentId = _data?.data?.id || _data?.id || commitmentId
       resetForm()
       onClose()
       queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: ["project", "by-reference", project_reference_id] })
+      if (newCommitmentId) {
+        queryClient.invalidateQueries({ queryKey: ["commitment-documents", newCommitmentId] })
+      }
     },
     onError: (error: any) => {
       const message =
@@ -338,11 +568,15 @@ export function FundingCommitmentDialog({
     },
     onSuccess: () => {
       alerts.success("Commitment Withdrawn", "Your commitment has been withdrawn successfully.")
+      const withdrawnCommitmentId = commitmentId
       resetForm()
       onClose()
       // Refresh lists and project details
       queryClient.invalidateQueries({ queryKey: LIVE_PROJECTS_QUERY_KEY })
       queryClient.invalidateQueries({ queryKey: ["project", "by-reference", project_reference_id] })
+      if (withdrawnCommitmentId) {
+        queryClient.invalidateQueries({ queryKey: ["commitment-documents", withdrawnCommitmentId] })
+      }
     },
     onError: (error: any) => {
       const message =
@@ -495,23 +729,149 @@ export function FundingCommitmentDialog({
               </div>
             </div>
 
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-              <div className="space-y-1.5 sm:col-span-3">
-                <Label htmlFor="supportingDocument" className="text-sm font-medium">Supporting Document</Label>
-                <Input
-                  id="supportingDocument"
-                  type="file"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null
-                    setSupportingDocument(file)
-                  }}
-                  className="h-9 text-sm cursor-pointer"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Upload sanction letters, approval notes, or other supporting documents (optional)
-                </p>
+            {/* Existing Documents (when editing) */}
+            {commitmentId && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-3">
+                  <Label className="text-sm font-medium">Supporting Documents *</Label>
+                  
+                  {/* File Upload for existing commitment - only show if no documents exist */}
+                  {existingDocuments.length === 0 && (
+                    <>
+                      <Input
+                        id="supportingDocumentsEdit"
+                        type="file"
+                        multiple
+                        onChange={(e) => handleFileUpload(e.target.files)}
+                        className="h-9 text-sm cursor-pointer mb-3"
+                        disabled={uploadDocumentMutation.isPending}
+                      />
+                      {uploadDocumentMutation.isPending && (
+                        <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-2">
+                          <Spinner size={16} />
+                          <span>Uploading document...</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  
+                  {/* Existing Documents List */}
+                  {existingDocuments.length > 0 ? (
+                    <div className="space-y-2">
+                      {existingDocuments.map((doc) => (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-950/20 border-green-200"
+                        >
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{doc.file?.original_filename || doc.file?.filename || 'Unknown file'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {doc.file?.file_size ? formatFileSize(doc.file.file_size) : 'Unknown size'} • {doc.document_type?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) || 'Document'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1 ml-2">
+                            {doc.file?.id && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadFile(doc.file.id, doc.file.original_filename || doc.file.filename)}
+                                title="Download file"
+                                className="flex-shrink-0"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(doc.file_id)}
+                              disabled={deletingFileId === doc.file_id || uploadDocumentMutation.isPending}
+                              title="Delete file"
+                              className="flex-shrink-0"
+                            >
+                              {deletingFileId === doc.file_id ? (
+                                <Spinner size={16} />
+                              ) : (
+                                <X className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    !uploadDocumentMutation.isPending && (
+                      <p className="text-sm text-muted-foreground">No documents uploaded yet. Use the file input above to upload documents.</p>
+                    )
+                  )}
+                  {documentError && (
+                    <p className="text-xs text-destructive mt-1">{documentError}</p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* File Upload (when creating new commitment) */}
+            {!commitmentId && (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-3">
+                  <Label htmlFor="supportingDocuments" className="text-sm font-medium">Supporting Documents *</Label>
+                  <Input
+                    id="supportingDocuments"
+                    type="file"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || [])
+                      setSupportingDocuments(files)
+                      // Clear error when files are selected
+                      if (files.length > 0 && documentError) {
+                        setDocumentError("")
+                      }
+                    }}
+                    className={`h-9 text-sm cursor-pointer ${documentError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  />
+                  {documentError && (
+                    <p className="text-xs text-destructive mt-1">{documentError}</p>
+                  )}
+                  {supportingDocuments.length > 0 && (
+                    <div className="mt-2 space-y-2">
+                      {supportingDocuments.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            <FileText className="h-4 w-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{file.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {formatFileSize(file.size)}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSupportingDocuments(prev => prev.filter((_, i) => i !== index))
+                            }}
+                            className="flex-shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Upload sanction letters, approval notes, or other supporting documents (required)
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
           )}
         </div>
@@ -578,7 +938,8 @@ export function FundingCommitmentDialog({
                   !isWindowOpen ||
                   isLoadingProject ||
                   !project ||
-                  !!amountError
+                  !!amountError ||
+                  existingDocuments.length === 0
                 }
                 className="h-9 px-6"
               >

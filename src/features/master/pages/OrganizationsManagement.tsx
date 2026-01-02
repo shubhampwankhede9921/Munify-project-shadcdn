@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Plus, Edit, Building2 } from 'lucide-react'
+import { Plus, Edit, Building2, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { DatePicker } from '@/components/ui/date-picker'
@@ -17,6 +17,7 @@ import { alerts } from '@/lib/alerts'
 import { toast } from '@/hooks/use-toast'
 import { Spinner } from '@/components/ui/spinner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FeeConfigurationDialog } from '../components/FeeConfigurationDialog'
 
 interface Organization {
   id: number
@@ -87,6 +88,16 @@ export default function OrganizationsManagement() {
   // Store existing document information for edit mode
   const [existingPanDocument, setExistingPanDocument] = useState<any>(null)
   const [existingGstDocument, setExistingGstDocument] = useState<any>(null)
+  // Fee configuration dialog state
+  const [isFeeConfigDialogOpen, setIsFeeConfigDialogOpen] = useState(false)
+  const [selectedOrgForFeeConfig, setSelectedOrgForFeeConfig] = useState<{
+    id: number
+    name: string
+    type: 'lender' | 'municipality'
+    parentBranchId: number
+  } | null>(null)
+  // Municipality dropdown state
+  const [municipalityOpen, setMunicipalityOpen] = useState(false)
 
   // Fetch organization types using Perdix API with parent_branch_id: 999
   const {
@@ -220,42 +231,11 @@ export default function OrganizationsManagement() {
         }
       }
 
-      // Check if we need to send files - if yes, use FormData, otherwise use JSON
-      if (hasFiles()) {
-        // Use FormData when files are present
-        const formDataObj = buildFormData(false)
-        await apiService.post('/organizations/create', formDataObj, {
-          // axios will automatically set Content-Type to multipart/form-data for FormData
-        })
-      } else {
-        // Use JSON when no files are present (backward compatibility)
-        const apiData: any = {
-          bankId: formData.bankId,
-          parentBranchId: formData.parentBranchId,
-          branchName: formData.branchName,
-          branchMailId: formData.branchMailId,
-          pinCode: parseInt(formData.pinCode),
-          branchOpenDate: formData.branchOpenDate,
-          cashLimit: formData.cashLimit,
-          fingerPrintDeviceType: formData.fingerPrintDeviceType
-        }
-        
-        // Add conditional fields only if they exist
-        if (isLenderType()) {
-          apiData.lenderType = formData.lenderType
-          apiData.panNumber = formData.panNumber
-          apiData.gstNumber = formData.gstNumber
-        }
-        
-        if (isMunicipalityType()) {
-          apiData.state = formData.state
-          apiData.district = formData.district
-          apiData.panNumber = formData.panNumber
-          apiData.gstNumber = formData.gstNumber
-        }
-        
-        await apiService.post('/organizations/create', apiData)
-      }
+      // Always use FormData as API is designed to accept FormData
+      const formDataObj = buildFormData(false)
+      await apiService.post('/organizations/create', formDataObj, {
+        // axios will automatically set Content-Type to multipart/form-data for FormData
+      })
       alerts.success("Success", "Organization created successfully")
       setIsCreateDialogOpen(false)
       resetForm()
@@ -344,45 +324,12 @@ export default function OrganizationsManagement() {
       // Extract parentBranchId from selectedOrgType to ensure it's correct
       const parentBranchId = selectedOrgType ? parseInt(selectedOrgType.split('-')[0]) : formData.parentBranchId
       
-      // Check if we need to send files - if yes, use FormData, otherwise use JSON
-      if (hasFiles()) {
-        // Use FormData when files are present
-        const formDataObj = buildFormData(true, parentBranchId, 1) // true = include id and version
-        
-        await apiService.put(`/organizations/organizations`, formDataObj, {
-          // axios will automatically set Content-Type to multipart/form-data for FormData
-        })
-      } else {
-        // Use JSON when no files are present (backward compatibility)
-        const apiData: any = {
-          id: editingOrganization.id,
-          version: editingOrganization.version,
-          bankId: 1,
-          parentBranchId: parentBranchId,
-          branchName: formData.branchName,
-          branchMailId: formData.branchMailId,
-          pinCode: parseInt(formData.pinCode),
-          branchOpenDate: formData.branchOpenDate,
-          cashLimit: formData.cashLimit,
-          fingerPrintDeviceType: formData.fingerPrintDeviceType
-        }
-        
-        // Add conditional fields only if they exist
-        if (isLenderType()) {
-          apiData.lenderType = formData.lenderType
-          apiData.panNumber = formData.panNumber
-          apiData.gstNumber = formData.gstNumber
-        }
-        
-        if (isMunicipalityType()) {
-          apiData.state = formData.state
-          apiData.district = formData.district
-          apiData.panNumber = formData.panNumber
-          apiData.gstNumber = formData.gstNumber
-        }
-        
-        await apiService.put(`/organizations/organizations`, apiData)
-      }
+      // Always use FormData as API is designed to accept FormData
+      const formDataObj = buildFormData(true, parentBranchId, 1) // true = include id and version
+      
+      await apiService.put(`/organizations/organizations`, formDataObj, {
+        // axios will automatically set Content-Type to multipart/form-data for FormData
+      })
       alerts.success("Success", "Organization updated successfully")
       setIsEditDialogOpen(false)
       setEditingOrganization(null)
@@ -506,16 +453,49 @@ export default function OrganizationsManagement() {
     return orgName.includes('municipality')
   }
 
-  // Helper function to check if there are any files to upload
-  const hasFiles = () => {
-    return !!(formData.panDocument || formData.gstDocument)
+  // Fetch municipalities from API (for Municipality type)
+  const {
+    data: municipalitiesData,
+    isLoading: loadingMunicipalities,
+  } = useQuery({
+    queryKey: ["municipalities"],
+    queryFn: async () => {
+      const response = await apiService.get("/master/municipalities")
+      // Extract data array from response: { status, message, data: [{ id, state, municipality, ... }] }
+      const data = (response as any)?.data || []
+      return data.map((item: any) => ({
+        municipality: item.municipality,
+        state: item.state
+      }))
+    },
+    enabled: isMunicipalityType(), // Only fetch when municipality type is selected
+  })
+
+  // Helper function to get organization type from parentBranchId
+  const getOrganizationType = (parentBranchId: number): 'lender' | 'municipality' => {
+    const orgType = organizationTypes.find((org: OrganizationItem) => org.id === parentBranchId)
+    if (!orgType) return 'lender' // Default
+    const orgName = orgType.branchName.toLowerCase()
+    return orgName.includes('municipality') ? 'municipality' : 'lender'
+  }
+
+  // Open fee configuration dialog
+  const handleOpenFeeConfig = (organization: Organization) => {
+    const orgType = getOrganizationType(organization.parentBranchId)
+    setSelectedOrgForFeeConfig({
+      id: organization.id,
+      name: organization.branchName,
+      type: orgType,
+      parentBranchId: organization.parentBranchId,
+    })
+    setIsFeeConfigDialogOpen(true)
   }
 
   // Helper function to build FormData with all fields and files
   const buildFormData = (includeIdAndVersion: boolean = false, overrideParentBranchId?: number, overrideBankId?: number): FormData => {
     const formDataObj = new FormData()
     
-    // Append basic fields
+    // Append basic fields (always included for all organization types)
     formDataObj.append('bankId', String(overrideBankId ?? formData.bankId))
     formDataObj.append('parentBranchId', String(overrideParentBranchId ?? formData.parentBranchId))
     formDataObj.append('branchName', formData.branchName)
@@ -543,9 +523,7 @@ export default function OrganizationsManagement() {
       if (formData.gstDocument instanceof File) {
         formDataObj.append('gstDocument', formData.gstDocument, formData.gstDocument.name)
       }
-    }
-    
-    if (isMunicipalityType()) {
+    } else if (isMunicipalityType()) {
       if (formData.state) formDataObj.append('state', formData.state)
       if (formData.district) formDataObj.append('district', formData.district)
       if (formData.panNumber) formDataObj.append('panNumber', formData.panNumber)
@@ -558,6 +536,8 @@ export default function OrganizationsManagement() {
         formDataObj.append('gstDocument', formData.gstDocument, formData.gstDocument.name)
       }
     }
+    // For other organization types, only basic fields are sent (no conditional fields)
+    // This ensures FormData is always used regardless of organization type
     
     return formDataObj
   }
@@ -650,21 +630,30 @@ export default function OrganizationsManagement() {
     },
     {
       id: 'actions',
-      header: 'Action',
+      header: 'Actions',
       enableHiding: false,
       cell: ({ row }) => (
-        <div className="flex items-center justify-start">
+        <div className="flex items-center justify-start gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => openEditDialog(row.original)}
+            title="Edit Organization"
           >
             <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleOpenFeeConfig(row.original)}
+            title="Configure Fees"
+          >
+            <DollarSign className="h-4 w-4" />
           </Button>
         </div>
       ),
     },
-  ], [])
+  ], [openEditDialog, handleOpenFeeConfig])
 
   return (
     <div className="space-y-6">
@@ -740,13 +729,65 @@ export default function OrganizationsManagement() {
                 <Label htmlFor="branchName" className="text-sm font-medium">
                   Organization Name *
                 </Label>
-                <Input
-                  id="branchName"
-                  value={formData.branchName}
-                  onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
-                  className="h-10"
-                  placeholder="Enter organization name"
-                />
+                {isMunicipalityType() ? (
+                  <Popover open={municipalityOpen} onOpenChange={setMunicipalityOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={municipalityOpen}
+                        className="w-full justify-between h-10"
+                        disabled={submitting || loadingMunicipalities}
+                      >
+                        <div className="flex items-center text-gray-500 font-normal">
+                          {loadingMunicipalities ? (
+                            <span className="flex items-center gap-2"><Spinner size={16} /> Loading municipalities...</span>
+                          ) : formData.branchName || "Select municipality"}
+                        </div>
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      {loadingMunicipalities ? (
+                        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading municipalities...</div>
+                      ) : (
+                        <Command>
+                          <CommandInput placeholder="Search municipalities..." />
+                          <CommandList>
+                            <CommandEmpty>No municipality found.</CommandEmpty>
+                            <CommandGroup>
+                              {municipalitiesData?.map((item: { municipality: string; state: string }) => (
+                                <CommandItem
+                                  key={item.municipality}
+                                  value={item.municipality}
+                                  onSelect={() => {
+                                    setFormData({ ...formData, branchName: item.municipality, state: item.state })
+                                    setMunicipalityOpen(false)
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${
+                                      formData.branchName === item.municipality ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  <span>{item.municipality}</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Input
+                    id="branchName"
+                    value={formData.branchName}
+                    onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
+                    className="h-10"
+                    placeholder="Enter organization name"
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -954,11 +995,14 @@ export default function OrganizationsManagement() {
                       <Input
                         id="state"
                         value={formData.state || ''}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                        className="h-10"
-                        placeholder="Enter state"
-                        disabled={submitting}
+                        className="h-10 bg-muted"
+                        placeholder="State will be auto-filled"
+                        disabled={true}
+                        readOnly
                       />
+                      <p className="text-xs text-muted-foreground">
+                        State will be automatically filled when you select a municipality
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -1230,13 +1274,65 @@ export default function OrganizationsManagement() {
                 <Label htmlFor="editBranchName" className="text-sm font-medium">
                   Organization Name *
                 </Label>
-                <Input
-                  id="editBranchName"
-                  value={formData.branchName}
-                  onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
-                  className="h-10"
-                  placeholder="Enter organization name"
-                />
+                {isMunicipalityType() ? (
+                  <Popover open={municipalityOpen} onOpenChange={setMunicipalityOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={municipalityOpen}
+                        className="w-full justify-between h-10"
+                        disabled={submitting || loadingMunicipalities}
+                      >
+                        <div className="flex items-center text-gray-500 font-normal">
+                          {loadingMunicipalities ? (
+                            <span className="flex items-center gap-2"><Spinner size={16} /> Loading municipalities...</span>
+                          ) : formData.branchName || "Select municipality"}
+                        </div>
+                        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-full p-0">
+                      {loadingMunicipalities ? (
+                        <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground"><Spinner size={16} /> Loading municipalities...</div>
+                      ) : (
+                        <Command>
+                          <CommandInput placeholder="Search municipalities..." />
+                          <CommandList>
+                            <CommandEmpty>No municipality found.</CommandEmpty>
+                            <CommandGroup>
+                              {municipalitiesData?.map((item: { municipality: string; state: string }) => (
+                                <CommandItem
+                                  key={item.municipality}
+                                  value={item.municipality}
+                                  onSelect={() => {
+                                    setFormData({ ...formData, branchName: item.municipality, state: item.state })
+                                    setMunicipalityOpen(false)
+                                  }}
+                                >
+                                  <Check
+                                    className={`mr-2 h-4 w-4 ${
+                                      formData.branchName === item.municipality ? "opacity-100" : "opacity-0"
+                                    }`}
+                                  />
+                                  <span>{item.municipality}</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Input
+                    id="editBranchName"
+                    value={formData.branchName}
+                    onChange={(e) => setFormData({ ...formData, branchName: e.target.value })}
+                    className="h-10"
+                    placeholder="Enter organization name"
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
@@ -1508,11 +1604,14 @@ export default function OrganizationsManagement() {
                       <Input
                         id="editState"
                         value={formData.state || ''}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                        className="h-10"
-                        placeholder="Enter state"
-                        disabled={submitting}
+                        className="h-10 bg-muted"
+                        placeholder="State will be auto-filled"
+                        disabled={true}
+                        readOnly
                       />
+                      <p className="text-xs text-muted-foreground">
+                        State will be automatically filled when you select a municipality
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -1721,6 +1820,23 @@ export default function OrganizationsManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Fee Configuration Dialog */}
+      {selectedOrgForFeeConfig && (
+        <FeeConfigurationDialog
+          open={isFeeConfigDialogOpen}
+          onOpenChange={(open) => {
+            setIsFeeConfigDialogOpen(open)
+            if (!open) {
+              setSelectedOrgForFeeConfig(null)
+            }
+          }}
+          organizationId={selectedOrgForFeeConfig.id}
+          organizationName={selectedOrgForFeeConfig.name}
+          organizationType={selectedOrgForFeeConfig.type}
+          parentBranchId={selectedOrgForFeeConfig.parentBranchId}
+        />
+      )}
     </div>
   )
 }

@@ -11,16 +11,44 @@ import "sweetalert2/dist/sweetalert2.min.css"
 
 export const alerts = {
   success: (title: string, text?: string) =>
-    Swal.fire({ icon: "success", title, text }),
+    Swal.fire({ 
+      icon: "success", 
+      title, 
+      text,
+      timer: 3000,
+      timerProgressBar: true,
+      showConfirmButton: true,
+    }),
 
   error: (title: string, text?: string) =>
-    Swal.fire({ icon: "error", title, text }),
+    Swal.fire({ 
+      icon: "error", 
+      title, 
+      text,
+      timer: 4000,
+      timerProgressBar: true,
+      showConfirmButton: true,
+    }),
 
   info: (title: string, text?: string) =>
-    Swal.fire({ icon: "info", title, text }),
+    Swal.fire({ 
+      icon: "info", 
+      title, 
+      text,
+      timer: 3000,
+      timerProgressBar: true,
+      showConfirmButton: true,
+    }),
 
   warn: (title: string, text?: string) =>
-    Swal.fire({ icon: "warning", title, text }),
+    Swal.fire({ 
+      icon: "warning", 
+      title, 
+      text,
+      timer: 3500,
+      timerProgressBar: true,
+      showConfirmButton: true,
+    }),
 
   // Dialogs
   confirm: (title: string, text?: string) =>
@@ -32,5 +60,6 @@ export const alerts = {
       confirmButtonText: "Confirm",
       cancelButtonText: "Cancel",
       confirmButtonColor: "#2563eb",
+      // No timer for confirm dialogs as they require user interaction
     }),
 }
