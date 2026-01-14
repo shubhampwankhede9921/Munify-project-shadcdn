@@ -26,6 +26,7 @@ import { alerts } from "@/lib/alerts"
 import { cn } from "@/lib/utils"
 import { Spinner, LoadingOverlay } from "@/components/ui/spinner"
 import { useAuth } from "@/contexts/auth-context"
+import { perdixQueries } from "@/lib/perdix-config"
 
 // Type for organization/organization type items
 type OrganizationItem = {
@@ -68,22 +69,14 @@ export default function AdminInvitation() {
     queryFn: async () => await apiService.get<Array<{id: number, name: string, accessLevel: number}>>("/master/roles"),
   })
   
-  // Fetch organization types using Perdix API with parent_branch_id: 999
+  // Fetch organization types using Perdix API
   const {
     data: organizationTypes = [],
     isLoading: loadingOrgTypes,
   } = useQuery({
     queryKey: ["organizationTypes"],
     queryFn: async () => {
-      const response = await apiService.post("/perdix/query", {
-        identifier: "childBranch.list",
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: 999
-        },
-        skip_relogin: "yes"
-      })
+      const response = await apiService.post("/perdix/query", perdixQueries.organizationTypes())
       // Extract results array and map branch_name to branchName for consistency
       const results = (response as any)?.results || []
       return results.map((item: any): OrganizationItem => ({
@@ -104,15 +97,7 @@ export default function AdminInvitation() {
       if (!orgForm.organizationTypeId) {
         return []
       }
-      const response = await apiService.post("/perdix/query", {
-        identifier: "childBranch.list",
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: Number(orgForm.organizationTypeId)
-        },
-        skip_relogin: "yes"
-      })
+      const response = await apiService.post("/perdix/query", perdixQueries.childBranches(Number(orgForm.organizationTypeId)))
       // Extract results array and map branch_name to branchName for consistency
       const results = (response as any)?.results || []
       return results.map((item: any): OrganizationItem => ({

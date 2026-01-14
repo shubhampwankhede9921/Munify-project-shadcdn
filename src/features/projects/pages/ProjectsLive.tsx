@@ -942,6 +942,13 @@ export default function ProjectsLive() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-black/20" />
+              {p.project_reference_id && (
+                <div className="absolute top-4 left-4">
+                  <Badge className="bg-blue-600 hover:bg-blue-600 text-white font-mono text-xs border-blue-500">
+                    {p.project_reference_id}
+                  </Badge>
+                </div>
+              )}
               <div className="absolute top-4 right-4">
                 <Badge variant="secondary" className="bg-green-600 text-white">
                   {status}

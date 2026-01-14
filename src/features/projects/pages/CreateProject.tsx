@@ -18,6 +18,7 @@ import { alerts } from '@/lib/alerts'
 import apiService, { api } from '@/services/api'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/auth-context'
+import { perdixQueries } from '@/lib/perdix-config'
 
 // API Response Types
 interface ProjectCategory {
@@ -191,19 +192,11 @@ export default function CreateProject() {
     retry: false,
   })
 
-  // Query for municipalities using Perdix API with parent_branch_id: 101
+  // Query for municipalities using Perdix API
   const { data: municipalitiesResponse, isLoading: isLoadingMunicipalities } = useQuery({
     queryKey: ['municipalities'],
     queryFn: async () => {
-      const response = await apiService.post('/perdix/query', {
-        identifier: 'childBranch.list',
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: 101
-        },
-        skip_relogin: 'yes'
-      })
+      const response = await apiService.post('/perdix/query', perdixQueries.municipalities())
       // Extract results array and map to Municipality format
       const results = (response as any)?.results || []
       return results.map((item: any) => ({

@@ -16,6 +16,7 @@ import { alerts } from "@/lib/alerts"
 import { cn } from "@/lib/utils"
 import { Spinner, LoadingOverlay } from "@/components/ui/spinner"
 import { useQuery } from "@tanstack/react-query"
+import { perdixQueries } from "@/lib/perdix-config"
 
 // Type for organization/organization type items
 type OrganizationItem = {
@@ -108,7 +109,7 @@ export default function Register() {
     }
   }, [isRolesError, rolesError])
 
-  // Fetch organization types using Perdix API with parent_branch_id: 999
+  // Fetch organization types using Perdix API
   const {
     data: organizationTypes = [],
     isLoading: loadingOrgTypes,
@@ -117,15 +118,7 @@ export default function Register() {
   } = useQuery<OrganizationItem[]>({
     queryKey: ["organizationTypes"],
     queryFn: async () => {
-      const response = await apiService.post("/perdix/query", {
-        identifier: "childBranch.list",
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: 999
-        },
-        skip_relogin: "yes"
-      }, {
+      const response = await apiService.post("/perdix/query", perdixQueries.organizationTypes(), {
         usePerdixTimeout: true // Use extended timeout for Perdix queries
       })
       // Extract results array and map branch_name to branchName for consistency
@@ -158,15 +151,7 @@ export default function Register() {
       if (!orgFields.organizationTypeId) {
         return []
       }
-      const response = await apiService.post("/perdix/query", {
-        identifier: "childBranch.list",
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: Number(orgFields.organizationTypeId)
-        },
-        skip_relogin: "yes"
-      }, {
+      const response = await apiService.post("/perdix/query", perdixQueries.childBranches(Number(orgFields.organizationTypeId)), {
         usePerdixTimeout: true // Use extended timeout for Perdix queries
       })
       // Extract results array and map branch_name to branchName for consistency

@@ -38,6 +38,7 @@ interface Question {
   answeredBy?: string
   documentLinks?: string
   status: 'open' | 'answered'
+  replyStatus?: 'private' | 'public' // 'private' = draft, 'public' = published
 }
 
 
@@ -97,7 +98,9 @@ export default function QAManagement() {
     
     return questionsData.map((qa: any) => {
       const hasAnswer = qa.answer?.reply_text || qa.reply_text
-      const status: 'open' | 'answered' = hasAnswer ? 'answered' : 'open'
+      const replyStatus = qa.answer?.reply_status || (hasAnswer ? 'public' : undefined)
+      // Status is "answered" only if reply is published (public), otherwise "open" (including drafts)
+      const status: 'open' | 'answered' = (hasAnswer && replyStatus === 'public') ? 'answered' : 'open'
       
       return {
         id: qa.id,
@@ -112,17 +115,19 @@ export default function QAManagement() {
         answeredBy: qa.answer?.replied_by_user_id?.toString() || qa.replied_by_user_id?.toString(),
         documentLinks: qa.answer?.document_links || qa.document_links || undefined,
         status,
+        replyStatus: replyStatus as 'private' | 'public' | undefined,
       }
     })
   }, [questionsResponse])
 
   // Filter questions based on active tab
+  // Note: Drafts (replyStatus === 'private') should appear in "open" tab, not "answered"
   const questions = useMemo(() => {
     if (activeTab === 'open') {
-      return allQuestions.filter(q => q.status === 'open')
+      return allQuestions.filter(q => q.status === 'open' || q.replyStatus === 'private')
     }
     if (activeTab === 'answered') {
-      return allQuestions.filter(q => q.status === 'answered')
+      return allQuestions.filter(q => q.status === 'answered' && q.replyStatus !== 'private')
     }
     return allQuestions
   }, [activeTab, allQuestions])
@@ -147,8 +152,16 @@ export default function QAManagement() {
     })
   }
 
-  const getStatusBadge = (status: 'open' | 'answered') => {
+  const getStatusBadge = (status: 'open' | 'answered', replyStatus?: 'private' | 'public') => {
     if (status === 'open') {
+      // Check if it's a draft (has answer but status is private)
+      if (replyStatus === 'private') {
+        return (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900 dark:text-orange-200 inline-flex items-center gap-1">
+            <Clock className="h-3 w-3" /> Draft
+          </Badge>
+        )
+      }
       return (
         <Badge className="bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900 dark:text-amber-200 inline-flex items-center gap-1">
           <Clock className="h-3 w-3" /> Open
@@ -180,6 +193,13 @@ export default function QAManagement() {
     enabled: isEditMode && !!answeringQuestion?.id && !!answeringQuestion?.projectReferenceId,
   })
 
+  // Check if current answer is a draft
+  const isCurrentAnswerDraft = useMemo(() => {
+    if (!isEditMode || !questionDetails) return false
+    const answerData = questionDetails?.data?.answer || questionDetails?.answer
+    return answerData?.reply_status === 'private'
+  }, [isEditMode, questionDetails])
+
   // Update existing documents when question details are loaded
   useEffect(() => {
     // Handle API response structure: response.data.data.answer.documents
@@ -200,11 +220,13 @@ export default function QAManagement() {
   }
 
   const openAnswerDialog = (question: Question) => {
+    // If question has a draft (private reply), open in edit mode
+    const hasDraft = Boolean(question.replyStatus === 'private' && question.answer)
     setAnsweringQuestion(question)
-    setAnswerText("")
+    setAnswerText(hasDraft ? (question.answer || "") : "")
     setAnswerFiles([])
     setExistingDocuments([])
-    setIsEditMode(false)
+    setIsEditMode(hasDraft)
     setIsAnswerDialogOpen(true)
   }
 
@@ -274,7 +296,7 @@ export default function QAManagement() {
 
   // Mutation for answering/editing questions
   const answerQuestionMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (isDraft: boolean = false) => {
       if (!answeringQuestion) {
         throw new Error("No question selected for answer")
       }
@@ -284,6 +306,7 @@ export default function QAManagement() {
 
       const formData = new FormData()
       formData.append('reply_text', answerText.trim())
+      formData.append('is_draft', isDraft ? 'true' : 'false')
       
       // Always send files as a list/array:
       // - Single file: files: [file1.pdf] (as a list)
@@ -307,9 +330,14 @@ export default function QAManagement() {
       }
       return await apiService.post(endpoint, formData)
     },
-    onSuccess: () => {
-      alerts.success(isEditMode ? "Answer Updated" : "Answer Saved", 
-        isEditMode ? "The answer has been updated successfully." : "The answer has been saved successfully.")
+    onSuccess: (_, isDraft) => {
+      if (isDraft) {
+        alerts.success(isEditMode ? "Draft Updated" : "Draft Saved", 
+          isEditMode ? "The draft has been updated successfully." : "The draft has been saved successfully.")
+      } else {
+        alerts.success(isEditMode ? "Answer Updated" : "Answer Saved", 
+          isEditMode ? "The answer has been updated and published successfully." : "The answer has been saved and published successfully.")
+      }
       resetAnswerForm()
       setIsAnswerDialogOpen(false)
       queryClient.invalidateQueries({ queryKey: ['questions', { organization_id: ORGANIZATION_ID }] })
@@ -439,7 +467,7 @@ export default function QAManagement() {
       ),
       cell: ({ row }) => (
         <div className="flex items-center min-w-[120px]">
-          {getStatusBadge(row.original.status)}
+          {getStatusBadge(row.original.status, row.original.replyStatus)}
         </div>
       ),
       enableSorting: false,
@@ -486,6 +514,11 @@ export default function QAManagement() {
                   by {row.original.answeredBy}
                 </div>
               )}
+              {row.original.replyStatus === 'private' && (
+                <div className="text-xs text-orange-600 dark:text-orange-400 mt-0.5 font-medium">
+                  (Draft)
+                </div>
+              )}
             </>
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
@@ -519,19 +552,19 @@ export default function QAManagement() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => openAnswerDialog(question)}
-                disabled={!isOpen}
+                disabled={!isOpen && question.replyStatus !== 'private'}
                 className="cursor-pointer"
               >
                 <MessageSquare className="mr-2 h-4 w-4" />
-                Answer
+                {question.replyStatus === 'private' ? 'Edit Draft' : 'Answer'}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => openEditDialog(question)}
-                disabled={!isAnswered}
+                disabled={!isAnswered && question.replyStatus !== 'private'}
                 className="cursor-pointer"
               >
                 <Edit className="mr-2 h-4 w-4" />
-                Edit
+                {question.replyStatus === 'private' ? 'Edit Draft' : 'Edit'}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => openDeleteDialog(question)}
@@ -770,11 +803,13 @@ export default function QAManagement() {
       >
         <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{isEditMode ? "Edit Answer" : "Answer Question"}</DialogTitle>
+            <DialogTitle>{isEditMode ? (isCurrentAnswerDraft ? "Edit Draft" : "Edit Answer") : "Answer Question"}</DialogTitle>
             <DialogDescription>
               {isEditMode 
-                ? "Update the answer for this question."
-                : "Provide a single authoritative answer for this question."}
+                ? (isCurrentAnswerDraft 
+                    ? "Update your draft answer. You can save as draft or publish it."
+                    : "Update the published answer for this question.")
+                : "Provide a single authoritative answer for this question. You can save as draft or publish it."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -783,6 +818,13 @@ export default function QAManagement() {
               <p className="text-sm text-muted-foreground">
                 {answeringQuestion?.question}
               </p>
+              {isEditMode && isCurrentAnswerDraft && (
+                <div className="mt-2">
+                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300">
+                    Draft - Only you can see this
+                  </Badge>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="answer-text">Answer *</Label>
@@ -907,7 +949,7 @@ export default function QAManagement() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() => {
@@ -915,17 +957,31 @@ export default function QAManagement() {
                 setIsAnswerDialogOpen(false)
               }}
               disabled={answerQuestionMutation.isPending}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button
-              onClick={() => answerQuestionMutation.mutate()}
-              disabled={answerQuestionMutation.isPending || (isEditMode && isLoadingQuestionDetails)}
-            >
-              {answerQuestionMutation.isPending 
-                ? (isEditMode ? "Updating..." : "Saving...") 
-                : (isEditMode ? "Update Answer" : "Save Answer")}
-            </Button>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button
+                variant="outline"
+                onClick={() => answerQuestionMutation.mutate(true)}
+                disabled={answerQuestionMutation.isPending || (isEditMode && isLoadingQuestionDetails) || !answerText.trim()}
+                className="flex-1 sm:flex-initial"
+              >
+                {answerQuestionMutation.isPending 
+                  ? (isEditMode ? "Saving..." : "Saving...") 
+                  : (isEditMode ? "Save Draft" : "Save Draft")}
+              </Button>
+              <Button
+                onClick={() => answerQuestionMutation.mutate(false)}
+                disabled={answerQuestionMutation.isPending || (isEditMode && isLoadingQuestionDetails) || !answerText.trim()}
+                className="flex-1 sm:flex-initial"
+              >
+                {answerQuestionMutation.isPending 
+                  ? (isEditMode ? "Publishing..." : "Publishing...") 
+                  : (isEditMode ? (isCurrentAnswerDraft ? "Publish" : "Update Answer") : "Publish Answer")}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

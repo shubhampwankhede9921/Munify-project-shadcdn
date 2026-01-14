@@ -16,6 +16,7 @@ import apiService, { api } from '@/services/api'
 import { alerts } from '@/lib/alerts'
 import { toast } from '@/hooks/use-toast'
 import { Spinner } from '@/components/ui/spinner'
+import { perdixQueries } from '@/lib/perdix-config'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { FeeConfigurationDialog } from '../components/FeeConfigurationDialog'
 
@@ -99,22 +100,14 @@ export default function OrganizationsManagement() {
   // Municipality dropdown state
   const [municipalityOpen, setMunicipalityOpen] = useState(false)
 
-  // Fetch organization types using Perdix API with parent_branch_id: 999
+  // Fetch organization types using Perdix API
   const {
     data: organizationTypes = [],
     isLoading: loadingOrgTypes,
   } = useQuery({
     queryKey: ["organizationTypes"],
     queryFn: async () => {
-      const response = await apiService.post("/perdix/query", {
-        identifier: "childBranch.list",
-        limit: 0,
-        offset: 0,
-        parameters: {
-          parent_branch_id: 999
-        },
-        skip_relogin: "yes"
-      }, {
+      const response = await apiService.post("/perdix/query", perdixQueries.organizationTypes(), {
         usePerdixTimeout: true
       })
       // Extract results array and map branch_name to branchName for consistency

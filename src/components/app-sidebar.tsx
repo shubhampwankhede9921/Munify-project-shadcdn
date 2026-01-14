@@ -34,6 +34,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { menus, loading, error } = useMenu()
   const q = query.trim().toLowerCase()
 
+  // Helper function to check if route is dynamic (contains parameters like :id, :draftId, etc.)
+  const isDynamicRoute = (route: string): boolean => {
+    return route.includes(':')
+  }
+
   // Convert backend menus to sidebar format
   const navMainItems = React.useMemo(() => {
     if (!menus || menus.length === 0) {
@@ -42,12 +47,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     return menus
       .map((menu) => {
-        // Filter submenus based on search query
+        // Filter submenus:
+        // 1. Exclude dynamic routes (routes with :id, :draftId, etc.) - these are detail pages accessed via parent pages
+        // 2. Filter based on search query
         const filteredSubmenus = menu.submenus
-          .filter((submenu) => 
-            submenu.submenu_name.toLowerCase().includes(q) ||
-            menu.menu_name.toLowerCase().includes(q)
-          )
+          .filter((submenu) => {
+            // Exclude dynamic routes from sidebar (they require IDs and are accessed via parent pages)
+            if (isDynamicRoute(submenu.route)) {
+              return false
+            }
+            // Apply search filter
+            return (
+              submenu.submenu_name.toLowerCase().includes(q) ||
+              menu.menu_name.toLowerCase().includes(q)
+            )
+          })
           .map((submenu) => ({
             title: submenu.submenu_name,
             url: submenu.route.startsWith('/') ? submenu.route : `/${submenu.route}`,
@@ -111,7 +125,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         ) : (
           <>
             <NavMain items={navMainItems} />
-            <NavProjects projects={filteredProjects} />
+            {/* <NavProjects projects={filteredProjects} /> */}
           </>
         )}
       </SidebarContent>

@@ -106,11 +106,13 @@ interface QuestionAnswer {
     document_links?: string | null
     documents?: AnswerDocument[]
     created_at?: string
+    reply_status?: 'private' | 'public' // 'private' = draft, 'public' = published
   } | null
   // Fallback flat fields (defensive)
   reply_text?: string
   replied_by_user_id?: string | number
   document_links?: string | null
+  reply_status?: 'private' | 'public' // For flat field structure
 }
 
 interface QuestionsListApiResponse {
@@ -309,7 +311,10 @@ export default function ProjectDetails() {
   const getDisplayAnswer = (qa: QuestionAnswer | null) => {
     if (!qa) return null
     if (qa.answer && qa.answer.reply_text) {
-      return qa.answer
+      return {
+        ...qa.answer,
+        reply_status: qa.answer.reply_status || qa.reply_status || 'public', // Default to public for backward compatibility
+      }
     }
     if (qa.reply_text) {
       return {
@@ -319,6 +324,7 @@ export default function ProjectDetails() {
         document_links: qa.document_links,
         documents: qa.answer?.documents,
         created_at: qa.answer?.created_at,
+        reply_status: qa.reply_status || qa.answer?.reply_status || 'public', // Default to public for backward compatibility
       }
     }
     return null
@@ -1456,17 +1462,27 @@ export default function ProjectDetails() {
                                           setIsAnswerDialogOpen(true)
                                         }}
                                       >
-                                        {hasAnswer ? "Edit Answer" : "Answer"}
+                                        {hasAnswer 
+                                          ? (answer?.reply_status === 'private' ? "Edit Draft" : "Edit Answer")
+                                          : "Answer"}
                                       </Button>
                                     )}
                                   </div>
                                 </div>
 
                                 {hasAnswer ? (
-                                  <div className="bg-muted p-4 rounded-lg border-l-4 border-l-green-500 mt-2">
+                                  <div className={`bg-muted p-4 rounded-lg border-l-4 mt-2 ${
+                                    answer?.reply_status === 'private' 
+                                      ? 'border-l-orange-500' 
+                                      : 'border-l-green-500'
+                                  }`}>
                                     <div className="flex items-start space-x-3">
                                       <Avatar>
-                                        <AvatarFallback className="bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400">
+                                        <AvatarFallback className={
+                                          answer?.reply_status === 'private'
+                                            ? "bg-orange-100 dark:bg-orange-900 text-orange-600 dark:text-orange-400"
+                                            : "bg-green-100 dark:bg-green-900 text-green-600 dark:text-green-400"
+                                        }>
                                           {String(
                                             answer?.replied_by_user_id || "A",
                                           )
@@ -1475,12 +1491,21 @@ export default function ProjectDetails() {
                                         </AvatarFallback>
                                       </Avatar>
                                       <div className="flex-1">
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <CheckCircle className="h-4 w-4 text-green-600" />
+                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                          {answer?.reply_status === 'private' ? (
+                                            <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                          ) : (
+                                            <CheckCircle className="h-4 w-4 text-green-600" />
+                                          )}
                                           <div className="font-medium text-sm">
-                                            Answered by{" "}
+                                            {answer?.reply_status === 'private' ? 'Draft answer by' : 'Answered by'}{" "}
                                             {answer?.replied_by_user_id || "Municipality"}
                                           </div>
+                                          {answer?.reply_status === 'private' && (
+                                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 text-xs">
+                                              Draft
+                                            </Badge>
+                                          )}
                                         </div>
                                         <div className="text-sm leading-relaxed">
                                           {answer?.reply_text}
@@ -1845,12 +1870,22 @@ export default function ProjectDetails() {
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>
-                {getDisplayAnswer(answeringQuestion)
-                  ? "Edit Answer"
-                  : "Answer Question"}
+                {(() => {
+                  const existingAnswer = getDisplayAnswer(answeringQuestion)
+                  if (existingAnswer) {
+                    return existingAnswer.reply_status === 'private' ? "Edit Draft" : "Edit Answer"
+                  }
+                  return "Answer Question"
+                })()}
               </DialogTitle>
               <DialogDescription>
-                Provide a single authoritative answer for this question.
+                {(() => {
+                  const existingAnswer = getDisplayAnswer(answeringQuestion)
+                  if (existingAnswer?.reply_status === 'private') {
+                    return "Update your draft answer. This draft is only visible to you."
+                  }
+                  return "Provide a single authoritative answer for this question."
+                })()}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -1859,6 +1894,19 @@ export default function ProjectDetails() {
                 <p className="text-sm text-muted-foreground">
                   {answeringQuestion?.question_text}
                 </p>
+                {(() => {
+                  const existingAnswer = getDisplayAnswer(answeringQuestion)
+                  if (existingAnswer?.reply_status === 'private') {
+                    return (
+                      <div className="mt-2">
+                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300">
+                          Draft - Only you can see this
+                        </Badge>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="answer-text">Answer *</Label>
