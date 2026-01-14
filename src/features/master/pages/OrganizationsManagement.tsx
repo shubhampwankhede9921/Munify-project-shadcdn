@@ -155,6 +155,16 @@ export default function OrganizationsManagement() {
     }
   }, [])
 
+  // Use useMemo to create the Map only when organizationTypes change
+const organizationTypeMap = useMemo(() => {
+  const map = new Map<number, string>();
+  organizationTypes.forEach((item: OrganizationItem) => {
+    map.set(item.id, item.branchName);
+  });
+  return map;
+}, [organizationTypes]);
+
+
   const handleCreateOrganization = async () => {
     try {
       if (submitting) return
@@ -419,7 +429,7 @@ export default function OrganizationsManagement() {
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleDateString()
+      return new Date(dateString).toLocaleDateString("en-GB")
     } catch {
       return dateString
     }
@@ -594,8 +604,12 @@ export default function OrganizationsManagement() {
     },
     {
       accessorKey: 'branchName',
-      header: 'Branch Name',
+      header: 'Organisation Name',
       cell: ({ row }) => <span className="font-medium">{row.original.branchName}</span>,
+    },
+    {
+      header: 'Organisation Type',
+      cell: ({ row }) => <span className="font-medium">{organizationTypeMap.get(row.original.parentBranchId) || "Unknown"}</span>,
     },
     {
       accessorKey: 'branchMailId',
@@ -612,15 +626,15 @@ export default function OrganizationsManagement() {
       header: 'Open Date',
       cell: ({ row }) => <span className="text-sm">{formatDate(row.original.branchOpenDate)}</span>,
     },
-    {
-      accessorKey: 'fingerPrintDeviceType',
-      header: 'Device Type',
-      cell: ({ row }) => (
-        <Badge variant="secondary">
-          {row.original.fingerPrintDeviceType}
-        </Badge>
-      ),
-    },
+    // {
+    //   accessorKey: 'fingerPrintDeviceType',
+    //   header: 'Device Type',
+    //   cell: ({ row }) => (
+    //     <Badge variant="secondary">
+    //       {row.original.fingerPrintDeviceType}
+    //     </Badge>
+    //   ),
+    // },
     {
       id: 'actions',
       header: 'Actions',
@@ -823,11 +837,12 @@ export default function OrganizationsManagement() {
                     Organization Open Date *
                   </Label>
                   <DatePicker
-                    value={formData.branchOpenDate ? new Date(formData.branchOpenDate) : undefined}
+                    value={formData.branchOpenDate ? new Date(formData.branchOpenDate.replace(/-/g, "/")) : undefined}
                     onChange={(d) => {
                       const yyyyMmDd = d ? new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10) : ""
                       setFormData({ ...formData, branchOpenDate: yyyyMmDd })
                     }}
+                    disableFutureDates
                   />
                 </div>
               </div>
